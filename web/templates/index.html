@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tusk - File Storage</title>
+    <script src="https://unpkg.com/htmx.org@1.6.1"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              notion: {
+                50: "#fafafa",
+                100: "#f0f0f0",
+                200: "#e4e4e4",
+                300: "#d1d1d1",
+                400: "#b4b4b4",
+                500: "#9a9a9a",
+                600: "#818181",
+                700: "#6a6a6a",
+                800: "#555555",
+                900: "#2f2f2f",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-notion-50 text-notion-900 font-sans">
+    <div class="container mx-auto px-4 py-8">
+      <h1 class="text-4xl font-bold text-notion-800 mb-8">
+        Tusk - File Storage
+      </h1>
+
+      <div class="mb-8">{{template "partials/upload_form.html" .}}</div>
+
+      <div
+        id="file_list"
+        class="bg-white shadow-sm rounded-lg overflow-hidden border border-notion-200"
+      >
+        {{template "partials/file_list.html" .}}
+      </div>
+    </div>
+  </body>
+</html>

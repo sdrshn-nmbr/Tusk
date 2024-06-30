@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tusk - File Storage</title>
+    <script src="https://unpkg.com/htmx.org@1.6.1"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              notion: {
+                50: "#fafafa",
+                100: "#f0f0f0",
+                200: "#e4e4e4",
+                300: "#d1d1d1",
+                400: "#b4b4b4",
+                500: "#9a9a9a",
+                600: "#818181",
+                700: "#6a6a6a",
+                800: "#555555",
+                900: "#2f2f2f",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-notion-50 text-notion-900 font-sans"
+    x-data="{ sidebarOpen: false }"
+  >
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
+      <div
+        :class="{'translate-x-0 ease-out': sidebarOpen, '-translate-x-full ease-in': !sidebarOpen}"
+        class="fixed z-30 inset-y-0 left-0 w-64 transition duration-300 transform bg-notion-100 overflow-y-auto lg:translate-x-0 lg:static lg:inset-0"
+      >
+        <div class="flex items-center justify-center mt-8">
+          <div class="flex items-center">
+            <i class="fas fa-elephant text-notion-800 text-2xl mr-2"></i>
+            <span class="text-notion-800 text-2xl font-semibold">Tusk</span>
+          </div>
+        </div>
+        <nav class="mt-10">
+          <a
+            class="flex items-center mt-4 py-2 px-6 text-notion-600 hover:bg-notion-200 hover:text-notion-900"
+            href="#"
+          >
+            <i class="fas fa-folder-open mr-3"></i>
+            My Files
+          </a>
+          <a
+            class="flex items-center mt-4 py-2 px-6 text-notion-600 hover:bg-notion-200 hover:text-notion-900"
+            href="#"
+          >
+            <i class="fas fa-share-alt mr-3"></i>
+            Shared
+          </a>
+          <a
+            class="flex items-center mt-4 py-2 px-6 text-notion-600 hover:bg-notion-200 hover:text-notion-900"
+            href="#"
+          >
+            <i class="fas fa-trash mr-3"></i>
+            Trash
+          </a>
+          <a
+            class="flex items-center mt-4 py-2 px-6 text-notion-600 hover:bg-notion-200 hover:text-notion-900"
+            href="#"
+          >
+            <i class="fas fa-cog mr-3"></i>
+            Settings
+          </a>
+        </nav>
+      </div>
+
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <header
+          class="flex justify-between items-center py-4 px-6 bg-white border-b border-notion-200"
+        >
+          <div class="flex items-center">
+            <button
+              @click="sidebarOpen = !sidebarOpen"
+              class="text-notion-500 focus:outline-none lg:hidden"
+            >
+              <i class="fas fa-bars"></i>
+            </button>
+          </div>
+          <div class="flex items-center space-x-4">
+            <div class="relative">
+              <input
+                class="bg-notion-100 text-notion-800 py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-notion-300 w-64"
+                type="text"
+                placeholder="Search files..."
+              />
+              <span class="absolute right-0 top-0 mt-2 mr-3 text-notion-500">
+                <i class="fas fa-search"></i>
+              </span>
+            </div>
+            <button
+              onclick="openModal()"
+              class="bg-notion-800 text-white px-4 py-2 rounded-lg hover:bg-notion-700 transition duration-200"
+            >
+              <i class="fas fa-upload mr-2"></i>Upload
+            </button>
+            <button
+              class="bg-notion-200 text-notion-800 px-4 py-2 rounded-lg hover:bg-notion-300 transition duration-200"
+            >
+              <i class="fas fa-share mr-2"></i>Share
+            </button>
+          </div>
+        </header>
+
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-notion-50">
+          <div class="container mx-auto px-6 py-8">
+            <h3 class="text-3xl font-bold text-notion-800">My Files</h3>
+            <div class="mt-8">
+              <div class="flex flex-col mt-8">
+                <div
+                  class="bg-white shadow-sm rounded-lg overflow-hidden border border-notion-200"
+                >
+                  <div
+                    id="file-list"
+                    hx-trigger="fileListChanged from:body"
+                    hx-get="/files"
+                  >
+                    {{ template "file_list" . }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Upload modal -->
+    <div
+      id="upload-modal"
+      class="fixed inset-0 bg-notion-900 bg-opacity-50 z-50 flex items-center justify-center hidden"
+    >
+      <div class="bg-white rounded-lg p-8 max-w-md w-full">
+        <h3 class="text-2xl font-semibold mb-4 text-notion-800">Upload File</h3>
+        <form
+          id="upload-form"
+          hx-encoding="multipart/form-data"
+          hx-post="/upload"
+          hx-trigger="submit"
+          hx-target="#file-list"
+          hx-swap="innerHTML"
+        >
+          <div class="mb-4">
+            <label
+              class="block text-notion-700 text-sm font-medium mb-2"
+              for="file"
+            >
+              Choose a file
+            </label>
+            <input
+              type="file"
+              name="file"
+              id="file"
+              class="w-full text-notion-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-notion-100 file:text-notion-700 hover:file:bg-notion-200"
+            />
+          </div>
+          <div class="flex justify-end">
+            <button
+              type="button"
+              onclick="closeModal()"
+              class="bg-notion-200 hover:bg-notion-300 text-notion-800 font-medium py-2 px-4 rounded-lg mr-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="bg-notion-800 hover:bg-notion-700 text-white font-medium py-2 px-4 rounded-lg"
+            >
+              Upload
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      function openModal() {
+        document.getElementById("upload-modal").classList.remove("hidden");
+      }
+
+      function closeModal() {
+        document.getElementById("upload-modal").classList.add("hidden");
+      }
+
+      document
+        .getElementById("upload-form")
+        .addEventListener("htmx:afterRequest", function (event) {
+          if (event.detail.successful) {
+            closeModal();
+          }
+        });
+    </script>
+  </body>
+</html>
