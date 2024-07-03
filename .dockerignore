@@ -1,12 +1,74 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-*.db
-*.sqlite3
+# Ignore version control files
+.git
+.gitignore
+
+# Ignore Node.js related files and directories
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Ignore Go build artifacts and test files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin
+/vendor
+
+# Ignore Go workspace files
+go.work
+go.work.sum
+
+# Ignore development and IDE-specific files
+.vscode
+.idea
+*.swp
+*.swo
+*.swn
+*~
+
+# Ignore log files
 *.log
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore build output directories
+/build
+/dist
+
+# Ignore environment files
 *.env
-*.DS_Store
-*.git
-*.gitignore
-*.vscode
+
+# Ignore Tailwind CSS build output
+/web/static/css/styles.css
+
+# Ignore any local configuration files
+config.local.yaml
+
+# Ignore documentation files
+README.md
+LICENSE
+
+# Ignore test directories
+/test
+/tests
+
+# Ignore Docker related files
+Dockerfile
+docker-compose.yml
+
+# Ignore any backup files
+*.bak
+
+# Ignore cache directories
+.cache
+__pycache__
+
+# Ignore temporary files
+*.tmp
+*.temp

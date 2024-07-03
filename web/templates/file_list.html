@@ -48,6 +48,8 @@
         <button
           hx-post="/delete"
           hx-vals='{"filename": "{{ .Name }}"}'
+          hx-target="closest tr"
+          hx-swap="outerHTML"
           class="text-notion-600 hover:text-notion-900"
         >
           <i class="fas fa-trash"></i>

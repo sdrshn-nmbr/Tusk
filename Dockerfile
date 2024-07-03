@@ -1,20 +1,34 @@
-FROM python:3.12-slim
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# Build stage
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-# Copy the rest of the application code
+# Download dependencies
+RUN go mod download
+
+# Copy the source code
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Build the application
+RUN go build -o tusk ./cmd/server/
 
-# Start the application with Gunicorn
-CMD ["gunicorn", "-w", "${GUNICORN_WORKERS:-4}", "-k", "uvicorn.workers.UvicornWorker", "main:app"]
+# Run stage
+FROM alpine:latest
+
+WORKDIR /app
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/tusk .
+
+# Copy static files and templates
+COPY web /app/web
+
+# Expose the port the app runs on
+EXPOSE 8080
+
+# Run the application
+CMD ["./tusk"]
+

@@ -46,23 +46,27 @@ func (fs *FileStorage) GetFile(filename string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func (fs *FileStorage) DeleteFile(filename string) error {
+func (fs *FileStorage) DeleteFileFunc(filename string) error {
 	path := filepath.Join(fs.RootDir, filename)
 	return os.Remove(path)
 }
 
 func (fs *FileStorage) ListFiles() ([]string, error) {
 	var files []string
-	err := filepath.Walk(fs.RootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			relPath, _ := filepath.Rel(fs.RootDir, path)
-			files = append(files, relPath)
-		}
-		return nil
-	})
+	err := filepath.Walk(
+		fs.RootDir,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				relPath, _ := filepath.Rel(fs.RootDir, path)
+				files = append(files, relPath)
+			}
+
+			return nil
+		})
+
 	return files, err
 }
 

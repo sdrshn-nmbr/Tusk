@@ -21,131 +21,79 @@ type FileInfo struct {
 }
 
 func NewHandler(storage *storage.FileStorage, tmpl *template.Template) *Handler {
-	handler := &Handler{
-		Storage: storage, Tmpl: tmpl,
-	}
-
-	return handler
+	return &Handler{Storage: storage, Tmpl: tmpl}
 }
 
 func (h *Handler) Index(c *gin.Context) {
-	files, err := h.Storage.ListFiles()
-	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var fileInfos []FileInfo
-	for _, file := range files {
-		size, err := h.Storage.GetFileSize(file)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
-	}
-
-	c.HTML(http.StatusOK, "layout.html", gin.H{
-		"Files": fileInfos,
-	})
+	h.renderFileList(c, "layout.html")
 }
 
 func (h *Handler) UploadFile(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.String(http.StatusBadRequest, err.Error())
+		h.handleError(c, http.StatusBadRequest, err)
 		return
 	}
 	defer file.Close()
 
 	err = h.Storage.SaveFile(header.Filename, file)
 	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
-	files, err := h.Storage.ListFiles()
-	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var fileInfos []FileInfo
-	for _, file := range files {
-		size, err := h.Storage.GetFileSize(file)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
-	}
-
-	c.HTML(http.StatusOK, "file_list", gin.H{
-		"Files": fileInfos,
-	})
+	h.renderFileList(c, "file_list")
 }
 
 func (h *Handler) DeleteFile(c *gin.Context) {
 	filename := c.PostForm("filename")
-	err := h.Storage.DeleteFile(filename)
+	err := h.Storage.DeleteFileFunc(filename)
 	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
-
-	files, err := h.Storage.ListFiles()
-	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var fileInfos []FileInfo
-	for _, file := range files {
-		size, err := h.Storage.GetFileSize(file)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
-	}
-
-	c.HTML(http.StatusOK, "file_list", gin.H{
-		"Files": fileInfos,
-	})
+	// Returning success status only - no re-render required
+	c.Status(http.StatusOK)
 }
 
 func (h *Handler) GetFileList(c *gin.Context) {
-	files, err := h.Storage.ListFiles()
-	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var fileInfos []FileInfo
-	for _, file := range files {
-		size, err := h.Storage.GetFileSize(file)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
-	}
-
-	c.HTML(http.StatusOK, "file_list", gin.H{
-		"Files": fileInfos,
-	})
+	h.renderFileList(c, "file_list")
 }
 
 func (h *Handler) DownloadFile(c *gin.Context) {
 	filename := c.Query("filename")
 	content, err := h.Storage.GetFile(filename)
 	if err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	c.Header("Content-Disposition", "attachment; filename="+filepath.Base(filename))
 	c.Data(http.StatusOK, "application/octet-stream", content)
+}
+
+func (h *Handler) renderFileList(c *gin.Context, templateName string) {
+	files, err := h.Storage.ListFiles()
+	if err != nil {
+		h.handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	var fileInfos []FileInfo
+	for _, file := range files {
+		size, err := h.Storage.GetFileSize(file)
+		if err != nil {
+			h.handleError(c, http.StatusInternalServerError, err)
+			return
+		}
+		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
+	}
+
+	c.HTML(http.StatusOK, templateName, gin.H{"Files": fileInfos})
+}
+
+func (h *Handler) handleError(c *gin.Context, statusCode int, err error) {
+	c.String(statusCode, err.Error())
 }
 
 func formatFileSize(size int64) string {
