@@ -3,15 +3,18 @@ package handlers
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sdrshn-nmbr/tusk/internal/ai"
+	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
 )
 
 type Handler struct {
-	Storage *storage.FileStorage
+	Storage *storage.MongoStorage
 	Tmpl    *template.Template
 }
 
@@ -20,7 +23,7 @@ type FileInfo struct {
 	Size string
 }
 
-func NewHandler(storage *storage.FileStorage, tmpl *template.Template) *Handler {
+func NewHandler(storage *storage.MongoStorage, tmpl *template.Template) *Handler {
 	return &Handler{Storage: storage, Tmpl: tmpl}
 }
 
@@ -70,6 +73,32 @@ func (h *Handler) DownloadFile(c *gin.Context) {
 
 	c.Header("Content-Disposition", "attachment; filename="+filepath.Base(filename))
 	c.Data(http.StatusOK, "application/octet-stream", content)
+}
+
+func (h *Handler) Search(c *gin.Context) {
+	query := c.Query("q")
+
+	// Generate embedding for the query
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Fatal("Config not loaded properly")
+	}
+
+	embedder := ai.NewEmbedder(cfg)
+	embedding, err := embedder.GenerateEmbedding(query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate embedding"})
+		return
+	}
+
+	// Perform vector search
+	results, err := h.Storage.VectorSearch(embedding, 100, 10) // Adjust parameters as needed
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform search"})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
 }
 
 func (h *Handler) renderFileList(c *gin.Context, templateName string) {

@@ -6,6 +6,8 @@ toolchain go1.22.0
 
 require github.com/gin-gonic/gin v1.10.0
 
+require github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06
+
 require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/joho/godotenv v1.5.1

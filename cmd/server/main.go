@@ -5,13 +5,20 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"github.com/sdrshn-nmbr/tusk/internal/handlers"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
 )
 
 func main() {
+	// * load all secrets from config
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Fatal("Config not initialized properly")
+	}
+
 	// * Initialize file storage -> can be any dir you want it to be stored in
-	fs, err := storage.NewFileStorage(`C:\Users\suddu\OneDrive - purdue.edu\Documents\Tusk_Files`)
+	ms, err := storage.NewMongoStorage(cfg, "documents")
 	if err != nil {
 		log.Fatalf("Failed to initialize file storage: %v", err)
 	}
@@ -23,7 +30,7 @@ func main() {
 	}
 
 	// * Initialize handler
-	h := handlers.NewHandler(fs, tmpl)
+	h := handlers.NewHandler(ms, tmpl)
 
 	// * Set up Gin router
 	r := gin.Default()
@@ -37,6 +44,7 @@ func main() {
 	r.POST("/delete", h.DeleteFile)
 	r.GET("/files", h.GetFileList)
 	r.GET("/download", h.DownloadFile)
+	r.GET("/search", h.Search)
 
 	// * Serve static files
 	r.Static("/static", "./web/static")

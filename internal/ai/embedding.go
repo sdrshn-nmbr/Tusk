@@ -18,9 +18,9 @@ func NewEmbedder(cfg *config.Config) *Embedder {
 	}
 }
 
-func (e *Embedder) GenerateEmbedding(chunk string) ([]float32, error) {
+func (e *Embedder) GenerateEmbedding(text string) ([]float32, error) {
 	queryRequest := openai.EmbeddingRequest{
-		Input: []string{chunk},
+		Input: []string{text},
 		Model: openai.AdaEmbeddingV2,
 	}
 

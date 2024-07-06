@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"time"
+	"bytes"
 
 	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,10 +26,11 @@ type Document struct {
 	ID       primitive.ObjectID `bson:"_id,omitempty"`
 	Filename string             `bson:"filename"`
 	Content  primitive.Binary   `bson:"content"`
+	Chunks   []string           `bson:"chunks"`
 	Metadata map[string]string  `bson:"metadata,omitempty"`
 }
 
-func NewFileStorage(cfg *config.Config, collection string) (*MongoStorage, error) {
+func NewMongoStorage(cfg *config.Config, collection string) (*MongoStorage, error) {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.MongoDBURI))
 	if err != nil {
 		return nil, err
@@ -41,6 +43,7 @@ func NewFileStorage(cfg *config.Config, collection string) (*MongoStorage, error
 	}, nil
 
 }
+
 func (ms *MongoStorage) SaveFile(filename string, content io.Reader) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -50,15 +53,23 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader) error {
 		return err
 	}
 
+	text, err := extractTextFromPDF(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+
+	chunks := chunkText(text, 1024) // Adjust chunk size as needed
+
 	doc := Document{
 		Filename: filename,
 		Content: primitive.Binary{
 			Subtype: 0x00,
 			Data:    data,
 		},
+		Chunks: chunks,
 		Metadata: map[string]string{
 			"uploadDate": time.Now().Format(time.RFC3339),
-			"size":       fmt.Sprintf("%d", len(data)), // Store the size as a string
+			"size":       fmt.Sprintf("%d", len(data)),
 		},
 	}
 
