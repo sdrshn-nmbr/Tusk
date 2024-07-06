@@ -14,22 +14,19 @@ func TestVectorSearch(t *testing.T) {
 
 	cfg, err := config.NewConfig()
 	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
+		t.Fatalf("Failed to load config: %+v", err)
 	}
 
 	// Create a new MongoDB instance
-	mongodb, err := NewMongoStorage(cfg, "documents")
+	mongodb, err := NewMongoStorage(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create MongoDB instance: %v", err)
+		t.Fatalf("Failed to create MongoDB instance: %+v", err)
 	}
 
 	// Test MongoDB connection
 	err = mongodb.client.Ping(context.TODO(), nil)
 	if err != nil {
-		t.Fatalf("Failed to connect to MongoDB: %v", err)
-	}
-	if err != nil {
-		t.Fatalf("Failed to connect to MongoDB: %v", err)
+		t.Fatalf("Failed to connect to MongoDB: %+v", err)
 	}
 	t.Log("Successfully connected to MongoDB")
 
@@ -37,7 +34,7 @@ func TestVectorSearch(t *testing.T) {
 
 	queryEmbedding, err := embedder.GenerateEmbedding(query)
 	if err != nil {
-		t.Fatalf("Failed to generate embedding: %v", err)
+		t.Fatalf("Failed to generate embedding: %+v", err)
 	}
 
 	t.Logf("Generated embedding length: %d", len(queryEmbedding))
@@ -46,31 +43,24 @@ func TestVectorSearch(t *testing.T) {
 		t.Error("Generated embedding is empty")
 	}
 
-	var result []Document
-	results, err := mongodb.VectorSearch(queryEmbedding, 3, 1)
+	results, err := mongodb.VectorSearch(queryEmbedding, 20, 1)
 	if err != nil {
-		t.Fatalf("VectorSearch failed: %v", err)
+		t.Fatalf("VectorSearch failed: %+v", err)
 	}
 
 	t.Logf("Number of results: %d", len(results))
 	for i, res := range results {
 		t.Logf("Result %d:", i+1)
-		t.Logf("  Filename: %s", res.Filename)
-		t.Logf("  Number of chunks: %d", len(res.Chunks))
-		if len(res.Chunks) > 0 {
-			t.Logf("  Matching chunk: %.100s...", res.Chunks[0])
-		}
-		if score, ok := res.Metadata["score"]; ok {
-			t.Logf("  Score: %s", score)
-		}
+		t.Logf("  Filename: %s", res.parent)
+		t.Logf("  Matching chunk: %s...", res.Content)
 	}
 
-	// If no results, let's check if there are any documents in the collection
-	if len(result) == 0 {
-		count, err := mongodb.client.Database(mongodb.database).Collection("documents").CountDocuments(context.TODO(), bson.M{})
+	// If no results, let's check if there are any chunks in the collection
+	if len(results) == 0 {
+		count, err := mongodb.client.Database(mongodb.database).Collection(mongodb.chunksCollection).CountDocuments(context.TODO(), bson.M{})
 		if err != nil {
-			t.Fatalf("Failed to count documents: %v", err)
+			t.Fatalf("Failed to count chunks: %+v", err)
 		}
-		t.Logf("Total number of documents in collection: %d", count)
+		t.Logf("Total number of chunks in collection: %d", count)
 	}
 }
