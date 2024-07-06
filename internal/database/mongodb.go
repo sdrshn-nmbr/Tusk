@@ -39,5 +39,3 @@ func (m *MongoDB) Close() {
 		log.Printf("Error disconnecting from MongoDB: %+v", err)
 	}
 }
-
-// TODO Add methods for CRUD operations on file metadata and vector embeddings

@@ -1,14 +1,16 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"time"
-	"bytes"
 
+	"github.com/sdrshn-nmbr/tusk/internal/ai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -23,11 +25,12 @@ type MongoStorage struct {
 }
 
 type Document struct {
-	ID       primitive.ObjectID `bson:"_id,omitempty"`
-	Filename string             `bson:"filename"`
-	Content  primitive.Binary   `bson:"content"`
-	Chunks   []string           `bson:"chunks"`
-	Metadata map[string]string  `bson:"metadata,omitempty"`
+    ID           primitive.ObjectID `bson:"_id,omitempty"`
+    Filename     string             `bson:"filename"`
+    Content      primitive.Binary   `bson:"content"`
+    Chunks       []string           `bson:"chunks"`
+    DocEmbedding []float32          `bson:"doc_embedding"`
+    Metadata     map[string]string  `bson:"metadata,omitempty"`
 }
 
 func NewMongoStorage(cfg *config.Config, collection string) (*MongoStorage, error) {
@@ -44,21 +47,36 @@ func NewMongoStorage(cfg *config.Config, collection string) (*MongoStorage, erro
 
 }
 
-func (ms *MongoStorage) SaveFile(filename string, content io.Reader) error {
+func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	data, err := io.ReadAll(content)
 	if err != nil {
+		log.Printf("Error reading file content: %v", err)
 		return err
+	}
+
+	// Check if the file is a PDF
+	if !isPDF(data) {
+		log.Printf("File is not a PDF: %s", filename)
+		return fmt.Errorf("file is not a PDF")
 	}
 
 	text, err := extractTextFromPDF(bytes.NewReader(data))
 	if err != nil {
-		return err
+		log.Printf("Error extracting text from PDF: %v", err)
+		text = "Text extraction failed"
 	}
 
-	chunks := chunkText(text, 1024) // Adjust chunk size as needed
+	chunks := chunkText(text, 1000) // Adjust chunk size as needed
+
+	// Generate embedding for the entire text
+	embedding, err := embedder.GenerateEmbedding(text)
+	if err != nil {
+		log.Printf("Error generating embedding: %v", err)
+		return err
+	}
 
 	doc := Document{
 		Filename: filename,
@@ -66,7 +84,8 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader) error {
 			Subtype: 0x00,
 			Data:    data,
 		},
-		Chunks: chunks,
+		Chunks:       chunks,
+		DocEmbedding: embedding,
 		Metadata: map[string]string{
 			"uploadDate": time.Now().Format(time.RFC3339),
 			"size":       fmt.Sprintf("%d", len(data)),
@@ -75,7 +94,17 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader) error {
 
 	coll := ms.client.Database(ms.database).Collection(ms.collection)
 	_, err = coll.InsertOne(ctx, doc)
-	return err
+	if err != nil {
+		log.Printf("Error inserting document into MongoDB: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func isPDF(data []byte) bool {
+	// Check for PDF magic number
+	return len(data) > 4 && string(data[:4]) == "%PDF"
 }
 
 func (ms *MongoStorage) GetFile(filename string) ([]byte, error) {

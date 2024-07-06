@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sdrshn-nmbr/tusk/internal/ai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"github.com/sdrshn-nmbr/tusk/internal/handlers"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
@@ -17,23 +18,27 @@ func main() {
 		log.Fatal("Config not initialized properly")
 	}
 
-	// * Initialize file storage -> can be any dir you want it to be stored in
+	// Initialize MongoDB storage
 	ms, err := storage.NewMongoStorage(cfg, "documents")
 	if err != nil {
-		log.Fatalf("Failed to initialize file storage: %v", err)
+		log.Fatalf("Failed to initialize MongoDB storage: %v", err)
 	}
 
-	// * Parse templates
+	// Initialize embedder
+	embedder := ai.NewEmbedder(cfg)
+
+	// Parse templates
 	tmpl, err := template.ParseGlob("web/templates/*.html")
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	// * Initialize handler
-	h := handlers.NewHandler(ms, tmpl)
+	// Initialize handler with MongoDB storage and embedder
+	h := handlers.NewHandler(ms, embedder, tmpl)
 
 	// * Set up Gin router
 	r := gin.Default()
+	r.MaxMultipartMemory = 8 << 20 // 8 MiB
 
 	// * Load HTML templates
 	r.SetHTMLTemplate(tmpl)

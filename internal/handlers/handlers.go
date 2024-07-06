@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -14,8 +16,9 @@ import (
 )
 
 type Handler struct {
-	Storage *storage.MongoStorage
-	Tmpl    *template.Template
+	Storage  *storage.MongoStorage
+	Embedder *ai.Embedder
+	tmpl     *template.Template
 }
 
 type FileInfo struct {
@@ -23,8 +26,12 @@ type FileInfo struct {
 	Size string
 }
 
-func NewHandler(storage *storage.MongoStorage, tmpl *template.Template) *Handler {
-	return &Handler{Storage: storage, Tmpl: tmpl}
+func NewHandler(storage *storage.MongoStorage, embedder *ai.Embedder, tmpl *template.Template) *Handler {
+	return &Handler{
+		Storage:  storage,
+		Embedder: embedder,
+		tmpl:     tmpl,
+	}
 }
 
 func (h *Handler) Index(c *gin.Context) {
@@ -32,16 +39,41 @@ func (h *Handler) Index(c *gin.Context) {
 }
 
 func (h *Handler) UploadFile(c *gin.Context) {
-	file, header, err := c.Request.FormFile("file")
+	file, err := c.FormFile("file")
 	if err != nil {
-		h.handleError(c, http.StatusBadRequest, err)
+		log.Printf("Error getting file from form: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get file from form"})
 		return
 	}
-	defer file.Close()
 
-	err = h.Storage.SaveFile(header.Filename, file)
+	openedFile, err := file.Open()
 	if err != nil {
-		h.handleError(c, http.StatusInternalServerError, err)
+		log.Printf("Error opening file: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+		return
+	}
+	defer openedFile.Close()
+
+	// Create a bytes.Buffer to read the file content
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, openedFile)
+	if err != nil {
+		log.Printf("Error reading file content: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file content"})
+		return
+	}
+
+	// Create a new io.Reader from the buffer
+	reader := bytes.NewReader(buf.Bytes())
+
+	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder)
+	if err != nil {
+		if err.Error() == "file is not a PDF" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded file is not a PDF"})
+		} else {
+			log.Printf("Error saving file: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		}
 		return
 	}
 
