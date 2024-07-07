@@ -21,12 +21,15 @@ func NewEmbedder(cfg *config.Config) *Embedder {
 func (e *Embedder) GenerateEmbedding(text string) ([]float32, error) {
 	queryRequest := openai.EmbeddingRequest{
 		Input: []string{text},
-		Model: openai.AdaEmbeddingV2,
+		Model: openai.SmallEmbedding3,
+		// * OR 
+		// Model: openai.AdaEmbeddingV2,
+		// Dimensions: 1024, // ! if we want to shorten the embeddings to save space on VDB
 	}
 
 	queryResponse, err := e.client.CreateEmbeddings(context.Background(), queryRequest)
 	if err != nil {
-		log.Printf("Error creating query embedding: %v", err)
+		log.Printf("Error creating query embedding: %+v", err)
 		return nil, err
 	}
 

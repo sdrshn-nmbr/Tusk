@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+
 	// "path/filepath"
 
 	"github.com/joho/godotenv"
@@ -28,7 +29,7 @@ func NewConfig() (*Config, error) {
 			// Change to parent directory
 			err = os.Chdir("..")
 			if err != nil {
-				log.Printf("Failed to change to parent directory: %v", err)
+				log.Printf("Failed to change to parent directory: %+v", err)
 				break
 			}
 		}

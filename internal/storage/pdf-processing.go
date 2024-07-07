@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -20,7 +21,7 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 		return "", err
 	}
 
-	var text string
+	var text strings.Builder
 	for i := 1; i <= reader.NumPage(); i++ {
 		page := reader.Page(i)
 		if page.V.IsNull() {
@@ -30,10 +31,29 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		text += pageText
+		text.WriteString(pageText)
+		text.WriteString("\n") // Add a newline between pages
 	}
 
-	return text, nil
+	return postProcessText(text.String()), nil
+}
+
+func postProcessText(text string) string {
+	// Split the text into words, preserving spaces between words
+	words := strings.FieldsFunc(text, func(r rune) bool {
+		return unicode.IsSpace(r) || r == '\n'
+	})
+
+	// Rejoin words with proper spacing
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(word)
+	}
+
+	return strings.TrimSpace(result.String())
 }
 
 func chunkText(text string, chunkSize int) []string {

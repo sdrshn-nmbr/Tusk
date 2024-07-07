@@ -96,7 +96,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	documentID := result.InsertedID.(primitive.ObjectID)
 
-	chunks := chunkText(text, 2048) // Adjust chunk size as needed
+	chunks := chunkText(text, 1024) // Adjust chunk size as needed
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	for _, chunkText := range chunks {

@@ -41,14 +41,14 @@ func (h *Handler) Index(c *gin.Context) {
 func (h *Handler) UploadFile(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		log.Printf("Error getting file from form: %v", err)
+		log.Printf("Error getting file from form: %+v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get file from form"})
 		return
 	}
 
 	openedFile, err := file.Open()
 	if err != nil {
-		log.Printf("Error opening file: %v", err)
+		log.Printf("Error opening file: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
 		return
 	}
@@ -58,7 +58,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, openedFile)
 	if err != nil {
-		log.Printf("Error reading file content: %v", err)
+		log.Printf("Error reading file content: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file content"})
 		return
 	}
@@ -71,7 +71,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		if err.Error() == "file is not a PDF" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded file is not a PDF"})
 		} else {
-			log.Printf("Error saving file: %v", err)
+			log.Printf("Error saving file: %+v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
 		}
 		return
@@ -129,6 +129,8 @@ func (h *Handler) Search(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform search"})
 		return
 	}
+
+	// TODO Use Cohere reranking OR just replace embeddings model with a better one such as OpenAI-003
 
 	c.JSON(http.StatusOK, results)
 }

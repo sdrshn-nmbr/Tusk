@@ -100,7 +100,7 @@ func NewMongoDB(cfg *config.Config) (*MongoDB, error) {
 
 func (m *MongoDB) Close() {
 	if err := m.client.Disconnect(context.TODO()); err != nil {
-		log.Printf("Error disconnecting from MongoDB: %v", err)
+		log.Printf("Error disconnecting from MongoDB: %+v", err)
 	}
 }
 
@@ -204,7 +204,7 @@ func main() {
 	// Initialize MongoDB
 	mongodb, err := database.NewMongoDB(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		log.Fatalf("Failed to connect to MongoDB: %+v", err)
 	}
 	defer mongodb.Close()
 

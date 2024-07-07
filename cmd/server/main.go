@@ -19,9 +19,9 @@ func main() {
 	}
 
 	// Initialize MongoDB storage
-	ms, err := storage.NewMongoStorage(cfg, "documents")
+	ms, err := storage.NewMongoStorage(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize MongoDB storage: %v", err)
+		log.Fatalf("Failed to initialize MongoDB storage: %+v", err)
 	}
 
 	// Initialize embedder
@@ -30,7 +30,7 @@ func main() {
 	// Parse templates
 	tmpl, err := template.ParseGlob("web/templates/*.html")
 	if err != nil {
-		log.Fatalf("Failed to parse templates: %v", err)
+		log.Fatalf("Failed to parse templates: %+v", err)
 	}
 
 	// Initialize handler with MongoDB storage and embedder

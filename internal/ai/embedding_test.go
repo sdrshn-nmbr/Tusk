@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/sdrshn-nmbr/tusk/internal/config"
+	// "github.com/sdrshn-nmbr/tusk/internal/ai"
 )
 
 func TestGenerateEmbedding(t *testing.T) {

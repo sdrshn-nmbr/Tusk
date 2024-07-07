@@ -15,13 +15,13 @@ func TestMongoDBMoviesQuery(t *testing.T) {
 	// Load configuration
 	cfg, err := config.NewConfig()
 	if err != nil {
-		t.Fatalf("Failed to load configuration: %v", err)
+		t.Fatalf("Failed to load configuration: %+v", err)
 	}
 
 	// Create a new MongoDB instance
 	mongodb, err := NewMongoDB(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create MongoDB instance: %v", err)
+		t.Fatalf("Failed to create MongoDB instance: %+v", err)
 	}
 	defer mongodb.Close()
 
@@ -39,14 +39,14 @@ func TestMongoDBMoviesQuery(t *testing.T) {
 	findOptions := options.Find().SetSort(bson.D{{Key: "year", Value: -1}}).SetLimit(int64(limit))
 	cursor, err := coll.Find(ctx, bson.D{}, findOptions)
 	if err != nil {
-		t.Fatalf("Failed to query movies: %v", err)
+		t.Fatalf("Failed to query movies: %+v", err)
 	}
 	defer cursor.Close(ctx)
 
 	// Iterate through the results
 	var movies []bson.M
 	if err = cursor.All(ctx, &movies); err != nil {
-		t.Fatalf("Failed to decode movies: %v", err)
+		t.Fatalf("Failed to decode movies: %+v", err)
 	}
 
 	// Check if we got any results
@@ -65,12 +65,12 @@ func TestMongoDBMoviesQuery(t *testing.T) {
 	title := "Jungle Book"
 	err = coll.FindOne(ctx, bson.M{"title": title}).Decode(&junglebook)
 	if err != nil {
-		t.Fatalf("Failed to find %s: %v", title, err)
+		t.Fatalf("Failed to find %s: %+v", title, err)
 	}
 	fmt.Printf("\n<<<%s>>>\n", junglebook["title"])
 
 	if junglebook["title"] != "Jungle Book" {
-		t.Errorf("Expected to find Jungle Book, but got %v", junglebook["name"])
+		t.Errorf("Expected to find Jungle Book, but got %+v", junglebook["name"])
 	}
 
 	// Force the test to fail if we want to see output
