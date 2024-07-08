@@ -159,9 +159,9 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 		case response, ok := <-responseChan:
 			if !ok {
 				// Response channel closed, all data received
-				c.HTML(http.StatusOK, "search_results.html", gin.H{
+				c.JSON(http.StatusOK, gin.H{
 					"query":   query,
-					"results": template.HTML(modelResponse.String()),
+					"results": modelResponse.String(),
 				})
 				return
 			}
@@ -171,38 +171,38 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 			if !ok {
 				// Error channel closed without error
 				if modelResponse.Len() == 0 {
-					c.HTML(http.StatusOK, "search_results.html", gin.H{
+					c.JSON(http.StatusOK, gin.H{
 						"query":   query,
-						"results": template.HTML("No results found."),
+						"results": "No results found.",
 					})
 				} else {
-					c.HTML(http.StatusOK, "search_results.html", gin.H{
+					c.JSON(http.StatusOK, gin.H{
 						"query":   query,
-						"results": template.HTML(modelResponse.String()),
+						"results": modelResponse.String(),
 					})
 				}
 				return
 			}
 			log.Printf("Error generating response: %v", err)
-			c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to generate response"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate response"})
 			return
 
 		case <-ctx.Done():
 			log.Printf("Request cancelled by client")
-			c.HTML(http.StatusRequestTimeout, "error.html", gin.H{"error": "Request timed out"})
+			c.JSON(http.StatusRequestTimeout, gin.H{"error": "Request timed out"})
 			return
 
 		case <-timeout:
 			log.Printf("Request timed out after 30 seconds")
 			if modelResponse.Len() == 0 {
-				c.HTML(http.StatusOK, "search_results.html", gin.H{
+				c.JSON(http.StatusOK, gin.H{
 					"query":   query,
-					"results": template.HTML("The request timed out. Please try again."),
+					"results": "The request timed out. Please try again.",
 				})
 			} else {
-				c.HTML(http.StatusOK, "search_results.html", gin.H{
+				c.JSON(http.StatusOK, gin.H{
 					"query":   query,
-					"results": template.HTML(modelResponse.String()),
+					"results": modelResponse.String(),
 				})
 			}
 			return

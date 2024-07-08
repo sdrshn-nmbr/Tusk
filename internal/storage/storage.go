@@ -101,7 +101,8 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	for _, chunkText := range chunks {
 		embedding, err := embedder.GenerateEmbedding(chunkText)
-		fmt.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
+		log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
+
 		if err != nil {
 			log.Printf("Error generating embedding: %+v", err)
 			continue

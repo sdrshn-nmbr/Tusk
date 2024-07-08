@@ -46,3 +46,34 @@
   }
 }
 
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: inline;
+}
+
+.loading-bar {
+  width: 0;
+  height: 4px;
+  background-color: #4caf50;
+  transition: width 0.3s ease;
+}
+
+.search-result {
+  @apply bg-white rounded-lg shadow-md p-4 mb-4;
+}
+
+.search-result h3 {
+  @apply text-lg font-semibold text-notion-800 mb-2;
+}
+
+.search-result p {
+  @apply text-sm text-notion-600 mb-2;
+}
+
+.search-result .highlight {
+  @apply bg-yellow-200 px-1 rounded;
+}
