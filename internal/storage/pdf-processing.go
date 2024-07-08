@@ -2,13 +2,13 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
-	"errors"
 
-	"github.com/unidoc/unipdf/v3/model"
-	"github.com/unidoc/unipdf/v3/extractor"
 	"github.com/unidoc/unipdf/v3/common/license"
+	"github.com/unidoc/unipdf/v3/extractor"
+	"github.com/unidoc/unipdf/v3/model"
 )
 
 func init() {
@@ -72,21 +72,36 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 func ChunkText(text string, chunkSize int) []string {
 	var chunks []string
 	words := strings.Fields(text)
-	currentChunk := ""
+	currentChunk := make([]string, 0, chunkSize/6) // Estimate average word length of 5
+	overlap := 100                                 // Number of characters to overlap between chunks
+	currentLength := 0
+	overlapStartIndex := 0
 
 	for _, word := range words {
-		if len(currentChunk)+len(word)+1 > chunkSize && len(currentChunk) > 0 {
-			chunks = append(chunks, strings.TrimSpace(currentChunk))
-			currentChunk = ""
+		if currentLength+len(word)+1 > chunkSize && len(currentChunk) > 0 {
+			chunks = append(chunks, strings.Join(currentChunk, " "))
+
+			// Find the start index for the overlap
+			overlapLength := 0
+			for i := len(currentChunk) - 1; i >= 0; i-- {
+				overlapLength += len(currentChunk[i]) + 1 // +1 for space
+				if overlapLength >= overlap {
+					overlapStartIndex = i
+					break
+				}
+			}
+
+			// Reset currentChunk to the overlapping portion
+			currentChunk = currentChunk[overlapStartIndex:]
+			currentLength = overlapLength - 1 // -1 to not count the space before the first word
 		}
-		if len(currentChunk) > 0 {
-			currentChunk += " "
-		}
-		currentChunk += word
+
+		currentChunk = append(currentChunk, word)
+		currentLength += len(word) + 1 // +1 for space
 	}
 
 	if len(currentChunk) > 0 {
-		chunks = append(chunks, strings.TrimSpace(currentChunk))
+		chunks = append(chunks, strings.Join(currentChunk, " "))
 	}
 
 	return chunks

@@ -96,12 +96,17 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	documentID := result.InsertedID.(primitive.ObjectID)
 
+	t0 := time.Now()
 	chunks := ChunkText(text, 2048)
+	fmt.Printf("\n\n\nTIME TAKEN FOR CHUNK TEXT:      %d", time.Since(t0))
+
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	for _, chunkText := range chunks {
 		embedding, err := embedder.GenerateEmbedding(chunkText)
-		log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
+		
+		// * To see if chunking is working properly
+		// log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
 
 		if err != nil {
 			log.Printf("Error generating embedding: %+v", err)
