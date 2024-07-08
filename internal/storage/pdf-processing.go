@@ -4,10 +4,21 @@ import (
 	"bytes"
 	"io"
 	"strings"
-	"unicode"
+	"errors"
 
-	"github.com/ledongthuc/pdf"
+	"github.com/unidoc/unipdf/v3/model"
+	"github.com/unidoc/unipdf/v3/extractor"
+	"github.com/unidoc/unipdf/v3/common/license"
 )
+
+func init() {
+	// Make sure to load your metered License API key prior to using the library.
+	// If you need a key, you can sign up and create a free one at https://cloud.unidoc.io
+	err := license.SetMeteredKey("5adb58fab7ae295b061fda4390cbb5b363d1089f89c515c4ef64d078c8ad2e5a")
+	if err != nil {
+		panic(err)
+	}
+}
 
 func extractTextFromPDF(content io.Reader) (string, error) {
 	var buf bytes.Buffer
@@ -16,47 +27,49 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 		return "", err
 	}
 
-	reader, err := pdf.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	pdfReader, err := model.NewPdfReader(bytes.NewReader(buf.Bytes()))
 	if err != nil {
 		return "", err
 	}
 
-	var text strings.Builder
-	for i := 1; i <= reader.NumPage(); i++ {
-		page := reader.Page(i)
-		if page.V.IsNull() {
-			continue
-		}
-		pageText, err := page.GetPlainText(nil)
+	isEncrypted, err := pdfReader.IsEncrypted()
+	if err != nil {
+		return "", err
+	}
+
+	if isEncrypted {
+		return "", errors.New("PDF is encrypted")
+	}
+
+	numPages, err := pdfReader.GetNumPages()
+	if err != nil {
+		return "", err
+	}
+
+	var textBuilder strings.Builder
+	for i := 1; i <= numPages; i++ {
+		page, err := pdfReader.GetPage(i)
 		if err != nil {
 			return "", err
 		}
-		text.WriteString(pageText)
-		text.WriteString("\n") // Add a newline between pages
-	}
 
-	return postProcessText(text.String()), nil
-}
-
-func postProcessText(text string) string {
-	// Split the text into words, preserving spaces between words
-	words := strings.FieldsFunc(text, func(r rune) bool {
-		return unicode.IsSpace(r) || r == '\n'
-	})
-
-	// Rejoin words with proper spacing
-	var result strings.Builder
-	for i, word := range words {
-		if i > 0 {
-			result.WriteString(" ")
+		ex, err := extractor.New(page)
+		if err != nil {
+			return "", err
 		}
-		result.WriteString(word)
+
+		text, err := ex.ExtractText()
+		if err != nil {
+			return "", err
+		}
+
+		textBuilder.WriteString(text)
 	}
 
-	return strings.TrimSpace(result.String())
+	return textBuilder.String(), nil
 }
 
-func chunkText(text string, chunkSize int) []string {
+func ChunkText(text string, chunkSize int) []string {
 	var chunks []string
 	words := strings.Fields(text)
 	currentChunk := ""

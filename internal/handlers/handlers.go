@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sdrshn-nmbr/tusk/internal/ai"
@@ -18,6 +19,7 @@ import (
 type Handler struct {
 	Storage  *storage.MongoStorage
 	Embedder *ai.Embedder
+	Model    *ai.Model
 	tmpl     *template.Template
 }
 
@@ -107,32 +109,105 @@ func (h *Handler) DownloadFile(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", content)
 }
 
-func (h *Handler) Search(c *gin.Context) {
+func (h *Handler) GenerateSearch(c *gin.Context) {
 	query := c.Query("q")
+	ctx := c.Request.Context()
 
-	// Generate embedding for the query
+	embedding, err := h.Embedder.GenerateEmbedding(query)
+	if err != nil {
+		log.Printf("Failed to generate embedding: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to generate embedding"})
+		return
+	}
+
+	chunks, err := h.Storage.VectorSearch(embedding, 500, 5)
+	if err != nil {
+		log.Printf("Failed to perform vector search: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to perform search"})
+		return
+	}
+
+	chunkStr := new(bytes.Buffer)
+	for i, chunk := range chunks {
+		fmt.Fprintf(chunkStr, "Document %d: \n%s\n\n", i, chunk.Content)
+	}
+
+	queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
+
 	cfg, err := config.NewConfig()
 	if err != nil {
-		log.Fatal("Config not loaded properly")
-	}
-
-	embedder := ai.NewEmbedder(cfg)
-	embedding, err := embedder.GenerateEmbedding(query)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate embedding"})
+		log.Printf("Failed to load config: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Internal server error"})
 		return
 	}
 
-	// Perform vector search
-	results, err := h.Storage.VectorSearch(embedding, 100, 10) // Adjust parameters as needed
+	model, err := ai.NewModel(cfg)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform search"})
+		log.Printf("Failed to create model: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to initialize AI model"})
 		return
 	}
+	defer model.Close()
 
-	// TODO Use Cohere reranking OR just replace embeddings model with a better one such as OpenAI-003
+	responseChan, errorChan := model.GenerateResponse(ctx, queryandchunks)
 
-	c.JSON(http.StatusOK, results)
+	modelResponse := new(bytes.Buffer)
+	timeout := time.After(30 * time.Second)
+
+	for {
+		select {
+		case response, ok := <-responseChan:
+			if !ok {
+				// Response channel closed, all data received
+				c.HTML(http.StatusOK, "search_results.html", gin.H{
+					"query":   query,
+					"results": template.HTML(modelResponse.String()),
+				})
+				return
+			}
+			modelResponse.WriteString(response)
+
+		case err, ok := <-errorChan:
+			if !ok {
+				// Error channel closed without error
+				if modelResponse.Len() == 0 {
+					c.HTML(http.StatusOK, "search_results.html", gin.H{
+						"query":   query,
+						"results": template.HTML("No results found."),
+					})
+				} else {
+					c.HTML(http.StatusOK, "search_results.html", gin.H{
+						"query":   query,
+						"results": template.HTML(modelResponse.String()),
+					})
+				}
+				return
+			}
+			log.Printf("Error generating response: %v", err)
+			c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to generate response"})
+			return
+
+		case <-ctx.Done():
+			log.Printf("Request cancelled by client")
+			c.HTML(http.StatusRequestTimeout, "error.html", gin.H{"error": "Request timed out"})
+			return
+
+		case <-timeout:
+			log.Printf("Request timed out after 30 seconds")
+			if modelResponse.Len() == 0 {
+				c.HTML(http.StatusOK, "search_results.html", gin.H{
+					"query":   query,
+					"results": template.HTML("The request timed out. Please try again."),
+				})
+			} else {
+				c.HTML(http.StatusOK, "search_results.html", gin.H{
+					"query":   query,
+					"results": template.HTML(modelResponse.String()),
+				})
+			}
+			return
+		}
+	}
 }
 
 func (h *Handler) renderFileList(c *gin.Context, templateName string) {

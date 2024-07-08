@@ -49,8 +49,8 @@ func main() {
 	r.POST("/delete", h.DeleteFile)
 	r.GET("/files", h.GetFileList)
 	r.GET("/download", h.DownloadFile)
-	r.GET("/search", h.Search)
-
+	r.GET("/generate-search", h.GenerateSearch)
+	
 	// * Serve static files
 	r.Static("/static", "./web/static")
 

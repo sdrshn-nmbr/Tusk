@@ -33,6 +33,17 @@
         },
       };
     </script>
+    <style>
+      .htmx-indicator {
+        display: none;
+      }
+      .htmx-request .htmx-indicator {
+        display: inline;
+      }
+      .htmx-request.htmx-indicator {
+        display: inline;
+      }
+    </style>
   </head>
   <body
     class="bg-notion-50 text-notion-900 font-sans"
@@ -136,6 +147,46 @@
                   >
                     {{ template "file_list" . }}
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- New Search Section -->
+            <div class="mt-8">
+              <h3 class="text-2xl font-bold text-notion-800">
+                Search Documents
+              </h3>
+              <div class="mt-4">
+                <form
+                  id="search-form"
+                  hx-get="/generate-search"
+                  hx-target="#search-results"
+                  hx-indicator="#search-indicator"
+                >
+                  <input
+                    type="text"
+                    name="q"
+                    placeholder="Enter your search query"
+                    class="w-full px-3 py-2 border border-notion-300 rounded-md focus:outline-none focus:ring-2 focus:ring-notion-500"
+                  />
+                  <button
+                    type="submit"
+                    class="mt-2 bg-notion-800 text-white px-4 py-2 rounded-md hover:bg-notion-700 transition duration-200"
+                  >
+                    Search
+                  </button>
+                </form>
+                <div
+                  id="search-indicator"
+                  class="htmx-indicator mt-2 text-notion-600"
+                >
+                  Searching...
+                </div>
+                <div
+                  id="search-results"
+                  class="mt-4 bg-white p-4 rounded-md shadow"
+                >
+                  <!-- Search results will be displayed here -->
                 </div>
               </div>
             </div>

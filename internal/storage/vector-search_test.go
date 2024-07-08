@@ -10,7 +10,7 @@ import (
 )
 
 func TestVectorSearch(t *testing.T) {
-	query := "What modern framework greatly reduced the problems in distributed computing"
+	query := "What are the backbones of FMs"
 
 	cfg, err := config.NewConfig()
 	if err != nil {

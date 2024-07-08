@@ -55,7 +55,7 @@ func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 }
 
 func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // ! A bit longer than 10s here to allow for bigger docs to be processed
 	defer cancel()
 
 	data, err := io.ReadAll(content)
@@ -96,11 +96,12 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	documentID := result.InsertedID.(primitive.ObjectID)
 
-	chunks := chunkText(text, 1024) // Adjust chunk size as needed
+	chunks := ChunkText(text, 2048)
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	for _, chunkText := range chunks {
 		embedding, err := embedder.GenerateEmbedding(chunkText)
+		fmt.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
 		if err != nil {
 			log.Printf("Error generating embedding: %+v", err)
 			continue

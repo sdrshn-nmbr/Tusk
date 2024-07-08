@@ -22,7 +22,7 @@ func (e *Embedder) GenerateEmbedding(text string) ([]float32, error) {
 	queryRequest := openai.EmbeddingRequest{
 		Input: []string{text},
 		Model: openai.SmallEmbedding3,
-		// * OR 
+		// * OR
 		// Model: openai.AdaEmbeddingV2,
 		// Dimensions: 1024, // ! if we want to shorten the embeddings to save space on VDB
 	}
