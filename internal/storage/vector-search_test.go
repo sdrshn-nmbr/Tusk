@@ -10,7 +10,7 @@ import (
 )
 
 func TestVectorSearch(t *testing.T) {
-	query := "What are the backbones of FMs"
+	query := "In a what paper was mentioned a shocking finding where scientists unicorns? tell me more about this and what is mentioned in the paper."
 
 	cfg, err := config.NewConfig()
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/unidoc/unipdf/v3/common/license"
 	"github.com/unidoc/unipdf/v3/extractor"
@@ -12,8 +13,6 @@ import (
 )
 
 func init() {
-	// Make sure to load your metered License API key prior to using the library.
-	// If you need a key, you can sign up and create a free one at https://cloud.unidoc.io
 	err := license.SetMeteredKey("5adb58fab7ae295b061fda4390cbb5b363d1089f89c515c4ef64d078c8ad2e5a")
 	if err != nil {
 		panic(err)
@@ -70,39 +69,43 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 }
 
 func ChunkText(text string, chunkSize int) []string {
-	var chunks []string
+	t0 := time.Now()
+
+	overlap := 50
 	words := strings.Fields(text)
-	currentChunk := make([]string, 0, chunkSize/6) // Estimate average word length of 5
-	overlap := 100                                 // Number of characters to overlap between chunks
+	if len(words) == 0 {
+		return nil
+	}
+
+	var chunks []string
+	currentChunk := strings.Builder{}
 	currentLength := 0
-	overlapStartIndex := 0
 
 	for _, word := range words {
-		if currentLength+len(word)+1 > chunkSize && len(currentChunk) > 0 {
-			chunks = append(chunks, strings.Join(currentChunk, " "))
+		if currentLength+len(word)+1 > chunkSize && currentLength > 0 {
+			chunks = append(chunks, strings.TrimSpace(currentChunk.String()))
 
-			// Find the start index for the overlap
-			overlapLength := 0
-			for i := len(currentChunk) - 1; i >= 0; i-- {
-				overlapLength += len(currentChunk[i]) + 1 // +1 for space
-				if overlapLength >= overlap {
-					overlapStartIndex = i
-					break
-				}
+			// Reset for next chunk, keeping overlap
+			overlapStart := len(chunks[len(chunks)-1]) - overlap
+			if overlapStart < 0 {
+				overlapStart = 0
 			}
-
-			// Reset currentChunk to the overlapping portion
-			currentChunk = currentChunk[overlapStartIndex:]
-			currentLength = overlapLength - 1 // -1 to not count the space before the first word
+			currentChunk.Reset()
+			currentChunk.WriteString(chunks[len(chunks)-1][overlapStart:])
+			currentChunk.WriteString(" ")
+			currentLength = currentChunk.Len()
 		}
 
-		currentChunk = append(currentChunk, word)
-		currentLength += len(word) + 1 // +1 for space
+		currentChunk.WriteString(word)
+		currentChunk.WriteString(" ")
+		currentLength += len(word) + 1
 	}
 
-	if len(currentChunk) > 0 {
-		chunks = append(chunks, strings.Join(currentChunk, " "))
+	if currentChunk.Len() > 0 {
+		chunks = append(chunks, strings.TrimSpace(currentChunk.String()))
 	}
+	
+	log.Printf("\n\n\nTIME TAKEN FOR CHUNK TEXT: %d\n\n\n", time.Since(t0))
 
 	return chunks
 }

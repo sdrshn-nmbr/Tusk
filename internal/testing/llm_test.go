@@ -60,7 +60,7 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 	}
 	defer model.Close()
 
-	query := "What modern framework greatly reduced the problems in distributed computing? Tell me a little bit about it."
+	query := "In a what paper was mentioned a shocking finding where scientists unicorns? tell me more about this and what is mentioned in the paper."
 
 	embedder := ai.NewEmbedder(cfg)
 
@@ -74,9 +74,14 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 		t.Logf("Error: %+v", err)
 	}
 
+	log.Printf("\n\n\n<<<CHUNKS>>>\n\n\n")
+
 	var chunkStr string = ""
 
 	for i, chunk := range chunks {
+		// To see if chunks are accurate and formatted
+		t.Logf("\n\n\nChunk for iter %d: \n\n%s\n\n", i, chunk.Content)
+
 		chunkStr += fmt.Sprintf("Document %d: \n%s\n\n", i, chunk.Content)
 	}
 
