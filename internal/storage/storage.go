@@ -1,3 +1,4 @@
+// new storage.go with concurrency
 package storage
 
 import (
@@ -8,6 +9,7 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/sdrshn-nmbr/tusk/internal/ai"
@@ -39,6 +41,12 @@ type Chunk struct {
 	Embedding  []float32          `bson:"embedding"`
 	parent     string             `bson:"parent"`
 }
+
+const (
+	numWorkers = 5
+	batchSize  = 1000
+	chunkSize  = 2048
+)
 
 func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.MongoDBURI))
@@ -96,15 +104,95 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	documentID := result.InsertedID.(primitive.ObjectID)
 
-	chunks := ChunkText(text, 2048)
+	chunks := ChunkText(text, chunkSize)
+
+	chunkChan := make(chan string, len(chunks))
+	resultsChan := make(chan Chunk, len(chunks))
+	errorChan := make(chan error, numWorkers)
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(embedder, documentID, filename, chunkChan, resultsChan, errorChan, &wg)
+	}
+
+	// Send chunks to workers
+	for _, chunk := range chunks {
+		chunkChan <- chunk
+	}
+	close(chunkChan)
+
+	// Wait for all workers to finish
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+		close(errorChan)
+	}()
+
+	// Collect results and insert into db
+	var batch []interface{}
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
-	for _, chunkText := range chunks {
+	insertBatch := func() error {
+		if len(batch) > 0 {
+			_, err := chunksColl.InsertMany(ctx, batch)
+			if err != nil {
+				log.Printf("Error inserting batch of chunks into MongoDB: %+v", err)
+				return err
+			}
+			batch = batch[:0] // Clear the batch
+		}
+		return nil
+	}
+
+	t01 := time.Now()
+	for chunk := range resultsChan {
+		batch = append(batch, chunk)
+		if len(batch) >= batchSize {
+			if err := insertBatch(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Insert any remaining chunks
+	if err := insertBatch(); err != nil {
+		return err
+	}
+
+	log.Printf("Time taken with workers: %v", time.Since(t01))
+
+	// Check for any errors from workers
+	for err := range errorChan {
+		if err != nil {
+			log.Printf("Error from workers: %+v", err)
+			// Decide whether to return on first error or continue
+			// return err
+		}
+	}
+
+	return nil
+}
+
+func worker(embedder *ai.Embedder,
+	documentID primitive.ObjectID,
+	filename string,
+	chunkChan <-chan string,
+	resultsChan chan<- Chunk,
+	errorChan chan<- error,
+	wg *sync.WaitGroup) {
+
+	defer wg.Done()
+	for chunkText := range chunkChan {
 		embedding, err := embedder.GenerateEmbedding(chunkText)
-		log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
+
+		// * To see if chunking is working properly
+		// log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
 
 		if err != nil {
-			log.Printf("Error generating embedding: %+v", err)
+			// log.Printf("Error generating embedding: %+v", err)
+			errorChan <- err
 			continue
 		}
 
@@ -115,13 +203,9 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 			parent:     filename,
 		}
 
-		_, err = chunksColl.InsertOne(ctx, chunk)
-		if err != nil {
-			log.Printf("Error inserting chunk into MongoDB: %+v", err)
-		}
+		resultsChan <- chunk
 	}
 
-	return nil
 }
 
 func isPDF(data []byte) bool {
