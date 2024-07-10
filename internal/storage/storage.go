@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"runtime"
 
 	"github.com/sdrshn-nmbr/tusk/internal/ai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
@@ -43,9 +44,10 @@ type Chunk struct {
 }
 
 const (
-	numWorkers = 5
+	numWorkers = 16
 	batchSize  = 1000
 	chunkSize  = 2048
+	maxRetries = 3
 )
 
 func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
@@ -111,17 +113,28 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	errorChan := make(chan error, numWorkers)
 	var wg sync.WaitGroup
 
+	// Determine optimal number of workers
+	optimalWorkers := runtime.NumCPU() * 2
+	
+	log.Printf("\n\nOPTIMAL WORKERS\n\n: %d\n\n", optimalWorkers)
+	
+	if optimalWorkers > numWorkers {
+		optimalWorkers = numWorkers
+	}
+
 	// Start worker goroutines
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < optimalWorkers; i++ {
 		wg.Add(1)
 		go worker(embedder, documentID, filename, chunkChan, resultsChan, errorChan, &wg)
 	}
 
 	// Send chunks to workers
-	for _, chunk := range chunks {
-		chunkChan <- chunk
-	}
-	close(chunkChan)
+	go func() {
+		for _, chunk := range chunks {
+			chunkChan <- chunk
+		}
+		close(chunkChan)
+	}()
 
 	// Wait for all workers to finish
 	go func() {
@@ -131,68 +144,69 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	}()
 
 	// Collect results and insert into db
+	return ms.insertChunks(ctx, resultsChan, errorChan)
+}
+
+func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chunk, errorChan <-chan error) error {
 	var batch []interface{}
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	insertBatch := func() error {
-		if len(batch) > 0 {
-			_, err := chunksColl.InsertMany(ctx, batch)
-			if err != nil {
-				log.Printf("Error inserting batch of chunks into MongoDB: %+v", err)
-				return err
-			}
-			batch = batch[:0] // Clear the batch
+		if len(batch) == 0 {
+			return nil
 		}
+
+		opts := options.InsertMany().SetOrdered(false)
+		_, err := chunksColl.InsertMany(ctx, batch, opts)
+		if err != nil {
+			log.Printf("Error inserting batch of chunks into MongoDB: %+v", err)
+			return err
+		}
+		batch = batch[:0] // Clear the batch
 		return nil
 	}
 
 	t01 := time.Now()
-	for chunk := range resultsChan {
-		batch = append(batch, chunk)
-		if len(batch) >= batchSize {
-			if err := insertBatch(); err != nil {
+	for {
+		select {
+		case chunk, ok := <-resultsChan:
+			if !ok {
+				// Channel closed, insert remaining batch
+				if err := insertBatch(); err != nil {
+					return err
+				}
+				log.Printf("Time taken with workers: %v", time.Since(t01))
+				return nil
+			}
+			batch = append(batch, chunk)
+			if len(batch) >= batchSize {
+				if err := insertBatch(); err != nil {
+					return err
+				}
+			}
+		case err := <-errorChan:
+			if err != nil {
+				log.Printf("Error from workers: %+v", err)
 				return err
 			}
 		}
 	}
-
-	// Insert any remaining chunks
-	if err := insertBatch(); err != nil {
-		return err
-	}
-
-	log.Printf("Time taken with workers: %v", time.Since(t01))
-
-	// Check for any errors from workers
-	for err := range errorChan {
-		if err != nil {
-			log.Printf("Error from workers: %+v", err)
-			// Decide whether to return on first error or continue
-			// return err
-		}
-	}
-
-	return nil
 }
 
-func worker(embedder *ai.Embedder,
-	documentID primitive.ObjectID,
-	filename string,
-	chunkChan <-chan string,
-	resultsChan chan<- Chunk,
-	errorChan chan<- error,
-	wg *sync.WaitGroup) {
-
+func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename string, chunkChan <-chan string, resultsChan chan<- Chunk, errorChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for chunkText := range chunkChan {
-		embedding, err := embedder.GenerateEmbedding(chunkText)
-
-		// * To see if chunking is working properly
-		// log.Printf("\n\n\n<<Chunk Text>>>\n\n\n%s\n", chunkText)
-
+		var embedding []float32
+		var err error
+		for i := 0; i < maxRetries; i++ {
+			embedding, err = embedder.GenerateEmbedding(chunkText)
+			if err == nil {
+				break
+			}
+			time.Sleep(time.Duration(i*100) * time.Millisecond) // Exponential backoff
+		}
 		if err != nil {
-			// log.Printf("Error generating embedding: %+v", err)
-			errorChan <- err
+			errorChan <- fmt.Errorf("failed to generate embedding after %d retries: %v", maxRetries, err)
 			continue
 		}
 
@@ -205,7 +219,6 @@ func worker(embedder *ai.Embedder,
 
 		resultsChan <- chunk
 	}
-
 }
 
 func isPDF(data []byte) bool {
