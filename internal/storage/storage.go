@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
-	"runtime"
 
 	"github.com/sdrshn-nmbr/tusk/internal/ai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
@@ -46,7 +46,6 @@ type Chunk struct {
 const (
 	numWorkers = 16
 	batchSize  = 500
-	chunkSize  = 2048
 	maxRetries = 3
 )
 
@@ -106,7 +105,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	documentID := result.InsertedID.(primitive.ObjectID)
 
-	chunks := ChunkText(text, chunkSize)
+	chunks := ChunkText(text)
 
 	chunkChan := make(chan string, len(chunks))
 	resultsChan := make(chan Chunk, len(chunks))
@@ -115,9 +114,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	// Determine optimal number of workers
 	optimalWorkers := runtime.NumCPU() * 2
-	
-	log.Printf("\n\nOPTIMAL WORKERS\n\n: %d\n\n", optimalWorkers)
-	
+
 	if optimalWorkers > numWorkers {
 		optimalWorkers = numWorkers
 	}
@@ -148,21 +145,21 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 }
 
 func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chunk, errorChan <-chan error) error {
-	var batch []interface{}
+	var bulkOps []mongo.WriteModel
 	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
-	insertBatch := func() error {
-		if len(batch) == 0 {
+	flushBulkOps := func() error {
+		if len(bulkOps) == 0 {
 			return nil
 		}
 
-		opts := options.InsertMany().SetOrdered(false)
-		_, err := chunksColl.InsertMany(ctx, batch, opts)
+		opts := options.BulkWrite().SetOrdered(false)
+		_, err := chunksColl.BulkWrite(ctx, bulkOps, opts)
 		if err != nil {
-			log.Printf("Error inserting batch of chunks into MongoDB: %+v", err)
+			log.Printf("Error performing bulk write operation: %+v", err)
 			return err
 		}
-		batch = batch[:0] // Clear the batch
+		bulkOps = bulkOps[:0] // Clear the bulk operations
 		return nil
 	}
 
@@ -171,16 +168,19 @@ func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chu
 		select {
 		case chunk, ok := <-resultsChan:
 			if !ok {
-				// Channel closed, insert remaining batch
-				if err := insertBatch(); err != nil {
+				// Channel closed, flush remaining bulk operations
+				if err := flushBulkOps(); err != nil {
 					return err
 				}
 				log.Printf("Time taken with workers: %v", time.Since(t01))
 				return nil
 			}
-			batch = append(batch, chunk)
-			if len(batch) >= batchSize {
-				if err := insertBatch(); err != nil {
+			// Create an InsertOne model for each chunk
+			insertModel := mongo.NewInsertOneModel().SetDocument(chunk)
+			bulkOps = append(bulkOps, insertModel)
+
+			if len(bulkOps) >= batchSize {
+				if err := flushBulkOps(); err != nil {
 					return err
 				}
 			}

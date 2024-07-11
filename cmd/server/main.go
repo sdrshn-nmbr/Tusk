@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	// * load all secrets from config
+	// load all secrets from config
 	cfg, err := config.NewConfig()
 	if err != nil {
 		log.Fatal("Config not initialized properly")
@@ -36,11 +36,11 @@ func main() {
 	// Initialize handler with MongoDB storage and embedder
 	h := handlers.NewHandler(ms, embedder, tmpl)
 
-	// * Set up Gin router
+	// Set up Gin router
 	r := gin.Default()
 	r.MaxMultipartMemory = 8 << 20 // 8 MiB
 
-	// * Load HTML templates
+	// Load HTML templates
 	r.SetHTMLTemplate(tmpl)
 
 	// Routes
@@ -51,7 +51,7 @@ func main() {
 	r.GET("/download", h.DownloadFile)
 	r.GET("/generate-search", h.GenerateSearch)
 	
-	// * Serve static files
+	// Serve static files
 	r.Static("/static", "./web/static")
 
 	// Start server
