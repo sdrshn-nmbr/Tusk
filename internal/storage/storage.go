@@ -45,7 +45,7 @@ type Chunk struct {
 
 const (
 	numWorkers = 16
-	batchSize  = 1000
+	batchSize  = 500
 	chunkSize  = 2048
 	maxRetries = 3
 )

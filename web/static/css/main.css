@@ -4,13 +4,13 @@
 
 @layer base {
   body {
-    @apply bg-notion-50 text-notion-900;
+    @apply bg-white text-gray-800;
   }
 }
 
 @layer components {
   .file-icon {
-    @apply w-8 h-8 mr-3 text-notion-400;
+    @apply w-8 h-8 mr-3 text-green-700;
   }
 
   .modal {
@@ -22,27 +22,27 @@
   }
 
   .btn-primary {
-    @apply bg-notion-800 text-white hover:bg-notion-700;
+    @apply bg-green-800 text-white hover:bg-green-900;
   }
 
   .btn-secondary {
-    @apply bg-notion-200 text-notion-800 hover:bg-notion-300;
+    @apply bg-green-200 text-green-800 hover:bg-green-300;
   }
 
   .input {
-    @apply bg-notion-100 text-notion-800 py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-notion-300;
+    @apply bg-gray-100 text-gray-800 py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400;
   }
 
   .table-header {
-    @apply px-6 py-3 text-left text-xs font-medium text-notion-600 uppercase tracking-wider bg-notion-100;
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider bg-gray-100;
   }
 
   .table-cell {
-    @apply px-6 py-4 whitespace-nowrap text-sm text-notion-900;
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-800;
   }
 
   .table-row {
-    @apply hover:bg-notion-50 transition-colors duration-200;
+    @apply hover:bg-green-100 transition-colors duration-200;
   }
 }
 
@@ -58,22 +58,22 @@
 .loading-bar {
   width: 0;
   height: 4px;
-  background-color: #4caf50;
+  background-color: #1e6f3f;
   transition: width 0.3s ease;
 }
 
 .search-result {
-  @apply bg-white rounded-lg shadow-md p-4 mb-4;
+  @apply bg-white rounded-lg shadow-md p-4 mb-4 border border-gray-200;
 }
 
 .search-result h3 {
-  @apply text-lg font-semibold text-notion-800 mb-2;
+  @apply text-lg font-semibold text-green-800 mb-2;
 }
 
 .search-result p {
-  @apply text-sm text-notion-600 mb-2;
+  @apply text-sm text-gray-600 mb-2;
 }
 
 .search-result .highlight {
-  @apply bg-yellow-200 px-1 rounded;
+  @apply bg-gray-200 px-1 rounded;
 }
