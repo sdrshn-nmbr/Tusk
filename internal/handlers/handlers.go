@@ -129,9 +129,8 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	}
 
 	chunkStr := new(bytes.Buffer)
-	for _, chunk := range chunks {
-		// fmt.Fprintf(chunkStr, "Document %d: \n%s\n\n", i, chunk.Content)
-		fmt.Fprintf(chunkStr, "\n%s\n\n", chunk.Content)
+	for i, chunk := range chunks {
+		fmt.Fprintf(chunkStr, "Document %d: \n%s\n\n", i, chunk.Content)
 	}
 
 	queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
@@ -151,7 +150,7 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	}
 	defer model.Close()
 
-	responseChan, errorChan := model.GenerateResponseOllama(ctx, queryandchunks)
+	responseChan, errorChan := model.GenerateResponse(ctx, queryandchunks)
 
 	modelResponse := new(bytes.Buffer)
 	timeout := time.After(30 * time.Second)
