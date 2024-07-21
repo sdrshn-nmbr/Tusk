@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log"
 	"strings"
 
+	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"github.com/unidoc/unipdf/v3/common/license"
 	"github.com/unidoc/unipdf/v3/extractor"
 	"github.com/unidoc/unipdf/v3/model"
@@ -17,12 +19,16 @@ const (
 )
 
 func init() {
-	// Make sure to load your metered License API key prior to using the library.
-	// If you need a key, you can sign up and create a free one at https://cloud.unidoc.io
-	err := license.SetMeteredKey("5adb58fab7ae295b061fda4390cbb5b363d1089f89c515c4ef64d078c8ad2e5a")
-	if err != nil {
-		panic(err)
-	}
+	cfg, err := config.NewConfig()
+    if err != nil {
+        log.Fatal("Config not initialized properly")
+    }
+
+    // Initialize Unidoc license
+    err = license.SetMeteredKey(cfg.UnidocAPIKey)
+    if err != nil {
+        log.Fatalf("Failed to set Unidoc license: %v", err)
+    }
 }
 
 func extractTextFromPDF(content io.Reader) (string, error) {

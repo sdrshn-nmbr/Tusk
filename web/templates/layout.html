@@ -272,9 +272,23 @@
           try {
             const data = JSON.parse(evt.detail.target.innerHTML);
             const formattedResults = data.results.replace(/\n/g, "<br>");
+
+            // Function to truncate text
+            const truncate = (text, maxLength) => {
+              return text.length > maxLength
+                ? text.slice(0, maxLength) + "..."
+                : text;
+            };
+
+            // Set maximum length for the query (adjust as needed)
+            const maxQueryLength = 150;
+
             evt.detail.target.innerHTML = `
               <div class="search-result">
-                <h3>Search Results for: ${data.query}</h3>
+                <h3>Search Results for: ${truncate(
+                  data.query,
+                  maxQueryLength
+                )}</h3>
                 <p>${formattedResults}</p>
               </div>
             `;

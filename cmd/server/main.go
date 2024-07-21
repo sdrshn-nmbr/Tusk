@@ -50,7 +50,7 @@ func main() {
 	r.GET("/files", h.GetFileList)
 	r.GET("/download", h.DownloadFile)
 	r.GET("/generate-search", h.GenerateSearch)
-	
+
 	// Serve static files
 	r.Static("/static", "./web/static")
 

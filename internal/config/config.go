@@ -15,7 +15,8 @@ type Config struct {
 	OpenAIAPIKey     string
 	MongoDBURI       string
 	MongoDBDatabase  string
-	VectorCollection string
+	// VectorCollection string
+	UnidocAPIKey     string
 }
 
 func NewConfig() (*Config, error) {
@@ -41,11 +42,24 @@ func NewConfig() (*Config, error) {
 		OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
 		MongoDBURI:       os.Getenv("MONGODB_URI"),
 		MongoDBDatabase:  os.Getenv("MONGODB_DATABASE"),
-		VectorCollection: "file_vectors",
+		UnidocAPIKey:      os.Getenv("UNIDOC_API_KEY"),
+		// VectorCollection: "file_vectors",
 	}
 
 	// Validate that OpenAIAPIKey is not empty
 	if conf.OpenAIAPIKey == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY is not set in the environment")
+	}
+	if conf.GeminiAPIKey == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY is not set in the environment")
+	}
+	if conf.MongoDBURI == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY is not set in the environment")
+	}
+	if conf.MongoDBDatabase == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY is not set in the environment")
+	}
+	if conf.UnidocAPIKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY is not set in the environment")
 	}
 
