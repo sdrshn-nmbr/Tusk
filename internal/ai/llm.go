@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
@@ -20,10 +19,6 @@ type Model struct {
 	client *genai.Client
 	model  *genai.GenerativeModel
 	chat   *genai.ChatSession
-}
-
-type OllamaResponse struct {
-	Response string `json:"response"`
 }
 
 func NewModel(cfg *config.Config) (*Model, error) {
@@ -89,7 +84,7 @@ func (m *Model) Close() error {
 	return m.client.Close()
 }
 
-func (m *Model) GenerateResponseOllama(ctx context.Context, query string, chunks ...string) (<-chan string, <-chan error) {
+func (m *Model) GenerateResponseOllama(ctx context.Context, query string) (<-chan string, <-chan error) {
 	responseChan := make(chan string)
 	errChan := make(chan error, 1)
 
@@ -99,33 +94,27 @@ func (m *Model) GenerateResponseOllama(ctx context.Context, query string, chunks
 
 		url := "http://localhost:11434/api/generate"
 
-		var chunkStr strings.Builder
-		for _, chunk := range chunks {
-			chunkStr.WriteString("Chunks for context: \n\n")
-			chunkStr.WriteString(chunk + "\n")
-		}
-
 		payload := map[string]any{
 			"model":  "phi3",
-			"prompt": query + chunkStr.String(),
+			"prompt": query,
 			"stream": true,
 			"messages": []map[string]string{
 				{
-					"role": "system",
-					"content": "You are an AI assistant that helps users with their queries. Do not mention the text provided by the user in your response explicitly. Only use it for reference to help you generate your response. Make your response sound as natural as possible",
+					"role":    "system",
+					"content": "You are an AI assistant that answers the user's queries with the provided context which is given to you in the form of chunks. You are never to use a word that refers to the chunks in any way in your response, so as to make your response as natural sounding as possible.",
 				},
 			},
 		}
 
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
-			errChan <- fmt.Errorf("error marshaling JSON: %v", err)
+			errChan <- fmt.Errorf("error with marshalling json payload: %+v", err)
 			return
 		}
 
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
 		if err != nil {
-			errChan <- fmt.Errorf("error making request: %v", err)
+			errChan <- fmt.Errorf("error with api json response: %+v", err)
 			return
 		}
 		defer resp.Body.Close()
@@ -137,20 +126,21 @@ func (m *Model) GenerateResponseOllama(ctx context.Context, query string, chunks
 				break
 			}
 			if err != nil {
-				errChan <- fmt.Errorf("error reading response: %v", err)
-				return
+				errChan <- fmt.Errorf("error reading bytes from response: %+v", err)
+				break
 			}
 
 			var streamResp struct {
 				Response string `json:"response"`
 			}
 			if err := json.Unmarshal(line, &streamResp); err != nil {
-				errChan <- fmt.Errorf("error unmarshaling JSON: %v", err)
-				return
+				errChan <- fmt.Errorf("error unmarshalling json response: %+v", err)
+				break
 			}
 
 			responseChan <- streamResp.Response
 		}
+
 	}()
 
 	return responseChan, errChan

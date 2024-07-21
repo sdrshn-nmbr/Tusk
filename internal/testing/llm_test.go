@@ -36,7 +36,7 @@ func TestGenerateResponse(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("Error generating response: %v", err)
+				t.Fatalf("Error generating response 2: %v", err)
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("Error generating response: %v", err)
+				t.Fatalf("Error generating response 3: %v", err)
 			}
 		}
 	}
