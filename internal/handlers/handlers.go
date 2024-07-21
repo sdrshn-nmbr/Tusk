@@ -129,8 +129,9 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	}
 
 	chunkStr := new(bytes.Buffer)
-	for i, chunk := range chunks {
-		fmt.Fprintf(chunkStr, "Document %d: \n%s\n\n", i, chunk.Content)
+	for _, chunk := range chunks {
+		// fmt.Fprintf(chunkStr, "Document %d: \n%s\n\n", i, chunk.Content)
+		fmt.Fprintf(chunkStr, "\n%s\n\n", chunk.Content)
 	}
 
 	queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
