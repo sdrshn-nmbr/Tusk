@@ -4,12 +4,15 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,7 +67,7 @@ func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 }
 
 func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // ! A bit longer than 10s here to allow for bigger docs to be processed
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // A bit longer than 10s here to allow for bigger docs to be processed
 	defer cancel()
 
 	data, err := io.ReadAll(content)
@@ -73,14 +76,30 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 		return err
 	}
 
-	if !isPDF(data) {
-		log.Printf("File is not a PDF: %s", filename)
-		return fmt.Errorf("file is not a PDF")
+	// if !isValidFileType(data) {
+	// 	log.Printf("File is not a valid format: %s", filename)
+	// 	return fmt.Errorf("file is not a valid format")
+	// }
+
+	var text string
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".pdf":
+		text, err = extractTextFromPDF(bytes.NewReader(data))
+	case ".docx":
+		text, err = extractTextFromDOCX(bytes.NewReader(data))
+	case ".txt":
+		text, err = string(data), nil
+	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
+		base64Image := base64.StdEncoding.EncodeToString(data)
+		text, err = extractTextFromImage(base64Image)
+	default:
+		log.Printf("unsupported file type: %s", ext)
+		err = fmt.Errorf("unsupported file type: %s", ext)
 	}
 
-	text, err := extractTextFromPDF(bytes.NewReader(data))
 	if err != nil {
-		log.Printf("Error extracting text from PDF: %+v", err)
+		log.Printf("Error extracting text from file: %+v", err)
 		text = "Text extraction failed"
 	}
 
@@ -221,9 +240,23 @@ func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename strin
 	}
 }
 
-func isPDF(data []byte) bool {
+func isValidFileType(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+
 	// Check for PDF magic number
-	return len(data) > 4 && string(data[:4]) == "%PDF"
+	if string(data[:4]) == "%PDF" {
+		return true
+	}
+
+	// Check for DOCX (Office Open XML) signature
+	// DOCX files are ZIP archives, so they start with PK\x03\x04
+	if len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04 {
+		return true
+	}
+
+	return false
 }
 
 func (ms *MongoStorage) GetFile(filename string) ([]byte, error) {

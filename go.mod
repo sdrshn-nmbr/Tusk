@@ -1,12 +1,13 @@
 module github.com/sdrshn-nmbr/tusk
 
-go 1.21
-
-toolchain go1.22.0
+go 1.22.0
 
 require github.com/gin-gonic/gin v1.10.0
 
-require github.com/unidoc/unipdf/v3 v3.60.0
+require (
+	github.com/ollama/ollama v0.3.0
+	github.com/unidoc/unipdf/v3 v3.60.0
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -19,7 +20,11 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 )
 
-require golang.org/x/image v0.18.0 // indirect
+require (
+	github.com/richardlehane/msoleps v1.0.3 // indirect
+	github.com/unidoc/unioffice v1.34.0
+	golang.org/x/image v0.18.0 // indirect
+)
 
 require (
 	cloud.google.com/go v0.115.0 // indirect

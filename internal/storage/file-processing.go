@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sdrshn-nmbr/tusk/internal/config"
+	"github.com/unidoc/unioffice/document"
 	"github.com/unidoc/unipdf/v3/common/license"
 	"github.com/unidoc/unipdf/v3/extractor"
 	"github.com/unidoc/unipdf/v3/model"
@@ -20,15 +21,15 @@ const (
 
 func init() {
 	cfg, err := config.NewConfig()
-    if err != nil {
-        log.Fatal("Config not initialized properly")
-    }
+	if err != nil {
+		log.Fatal("Config not initialized properly")
+	}
 
-    // Initialize Unidoc license
-    err = license.SetMeteredKey(cfg.UnidocAPIKey)
-    if err != nil {
-        log.Fatalf("Failed to set Unidoc license: %v", err)
-    }
+	// Initialize Unidoc license
+	err = license.SetMeteredKey(cfg.UnidocAPIKey)
+	if err != nil {
+		log.Fatalf("Failed to set Unidoc license: %v", err)
+	}
 }
 
 func extractTextFromPDF(content io.Reader) (string, error) {
@@ -75,6 +76,32 @@ func extractTextFromPDF(content io.Reader) (string, error) {
 		}
 
 		textBuilder.WriteString(text)
+	}
+
+	return textBuilder.String(), nil
+}
+
+func extractTextFromImage(content string) (string, error){
+	return content[:10], nil
+}
+
+func extractTextFromDOCX(content io.Reader) (string, error) {
+	data, err := io.ReadAll(content)
+	if err != nil {
+		return "", err
+	}
+	
+	doc, err := document.Read(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", err
+	}
+
+	var textBuilder strings.Builder
+	for _, para := range doc.Paragraphs() {
+		for _, run := range para.Runs() {
+			textBuilder.WriteString(run.Text())
+		}
+		textBuilder.WriteString("\n")
 	}
 
 	return textBuilder.String(), nil
