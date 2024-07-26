@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
@@ -21,11 +22,16 @@ type Model struct {
 	chat   *genai.ChatSession
 }
 
-func NewModel(cfg *config.Config) (*Model, error) {
+type ImageData struct {
+	Data     []byte
+	MimeType string
+}
+
+func NewModel(cfg *config.Config, sysPrompt string) (*Model, error) {
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, option.WithAPIKey(cfg.GeminiAPIKey))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
+		return nil, fmt.Errorf("failed to create Gemini client: %+v", err)
 	}
 
 	model := client.GenerativeModel("gemini-1.5-flash-latest")
@@ -34,7 +40,7 @@ func NewModel(cfg *config.Config) (*Model, error) {
 	chat.History = []*genai.Content{
 		{
 			Parts: []genai.Part{
-				genai.Text("You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible."),
+				genai.Text(sysPrompt),
 			},
 			Role: "user",
 		},
@@ -47,7 +53,7 @@ func NewModel(cfg *config.Config) (*Model, error) {
 	}, nil
 }
 
-func (m *Model) GenerateResponse(ctx context.Context, query string) (<-chan string, <-chan error) {
+func (m *Model) GenerateResponse(ctx context.Context, query string, imgData []byte, chunks ...string) (<-chan string, <-chan error) {
 	responseChan := make(chan string)
 	errChan := make(chan error, 1)
 
@@ -55,22 +61,35 @@ func (m *Model) GenerateResponse(ctx context.Context, query string) (<-chan stri
 		defer close(responseChan)
 		defer close(errChan)
 
-		iter := m.chat.SendMessageStream(ctx, genai.Text(query))
+		// Join chunks and query
+		allText := strings.Join(append(chunks, "Query: "+query), "\n")
+
+		var iter *genai.GenerateContentResponseIterator
+		if imgData != nil {
+			iter = m.chat.SendMessageStream(ctx, genai.Text(allText), genai.ImageData("", imgData))
+		} else {
+			iter = m.chat.SendMessageStream(ctx, genai.Text(allText))
+		}
 
 		for {
 			resp, err := iter.Next()
 			if err == iterator.Done {
-				break
+				return
 			}
 			if err != nil {
-				errChan <- fmt.Errorf("error generating content: %v", err)
+				errChan <- fmt.Errorf("error generating content: %+v", err)
 				return
 			}
 
 			for _, candidate := range resp.Candidates {
 				for _, part := range candidate.Content.Parts {
 					if textPart, ok := part.(genai.Text); ok {
-						responseChan <- string(textPart)
+						select {
+						case responseChan <- string(textPart):
+						case <-ctx.Done():
+							errChan <- ctx.Err()
+							return
+						}
 					}
 				}
 			}

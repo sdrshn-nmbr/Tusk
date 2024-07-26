@@ -14,13 +14,15 @@ import (
 func TestGenerateResponse(t *testing.T) {
 	cfg, _ := config.NewConfig()
 
-	model, _ := ai.NewModel(cfg)
+	sysPrompt := `You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+
+	model, _ := ai.NewModel(cfg, sysPrompt)
 	defer model.Close()
 
 	ctx := context.Background()
 	query := "What is the capital of Ethiopia?"
 
-	responseChan, errChan := model.GenerateResponse(ctx, query)
+	responseChan, errChan := model.GenerateResponse(ctx, query, nil)
 
 	for {
 		select {
@@ -36,7 +38,7 @@ func TestGenerateResponse(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("Error generating response 2: %v", err)
+				t.Fatalf("Error generating response 2: %+v", err)
 			}
 		}
 	}
@@ -54,7 +56,10 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 		t.Logf("Error: %+v", err)
 	}
 
-	model, err := ai.NewModel(cfg)
+	sysPrompt :=
+		`You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+
+	model, err := ai.NewModel(cfg, sysPrompt)
 	if err != nil {
 		log.Fatalf("Error: %+v", err)
 	}
@@ -85,13 +90,13 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 		chunkStr += fmt.Sprintf("Document %d: \n%s\n\n", i, chunk.Content)
 	}
 
-	queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr, query)
+	// queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr, query)
 
 	// t.Logf("\n\n\n <<<Query and Chunks>>>\n%s\n\n\n", queryandchunks)
 
 	ctx := context.Background()
 
-	responseChan, errorChan := model.GenerateResponse(ctx, queryandchunks)
+	responseChan, errorChan := model.GenerateResponse(ctx, query, nil, chunkStr)
 
 	for {
 		select {
@@ -107,7 +112,39 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("Error generating response 3: %v", err)
+				t.Fatalf("Error generating response 3: %+v", err)
+			}
+		}
+	}
+}
+
+func TestGenerateVision(t *testing.T) {
+	cfg, _ := config.NewConfig()
+	sysPrompt := `You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+
+	model, _ := ai.NewModel(cfg, sysPrompt)
+	defer model.Close()
+
+	ctx := context.Background()
+	query := "What is in this image?"
+
+	responseChan, errChan := model.GenerateResponse(ctx, query, nil)
+
+	for {
+		select {
+		case response, ok := <-responseChan:
+			if !ok {
+				// Channel closed, we're done
+				return
+			}
+			t.Log(response) // Print each chunk of the response
+		case err, ok := <-errChan:
+			if !ok {
+				// Error channel closed
+				return
+			}
+			if err != nil {
+				t.Fatalf("Error generating response 2: %+v", err)
 			}
 		}
 	}

@@ -13,14 +13,14 @@ func TestGenerateEmbedding(t *testing.T) {
 
 	cfg, err := config.NewConfig()
 	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
+		t.Fatalf("Failed to load config: %+v", err)
 	}
 
 	embedder := NewEmbedder(cfg)
 
 	response, err := embedder.GenerateEmbedding(chunk)
 	if err != nil {
-		t.Fatalf("Failed to generate embedding: %v", err)
+		t.Fatalf("Failed to generate embedding: %+v", err)
 	}
 
 	if len(response) == 0 {

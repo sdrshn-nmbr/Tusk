@@ -4,7 +4,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -91,8 +90,8 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	case ".txt":
 		text, err = string(data), nil
 	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
-		base64Image := base64.StdEncoding.EncodeToString(data)
-		text, err = extractTextFromImage(base64Image)
+		text, err = extractTextFromImage(data)
+		log.Print("\n\n\nEXTRACTING TEXT FROM IMG\n\n\n")
 	default:
 		log.Printf("unsupported file type: %s", ext)
 		err = fmt.Errorf("unsupported file type: %s", ext)
@@ -191,7 +190,7 @@ func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chu
 				if err := flushBulkOps(); err != nil {
 					return err
 				}
-				log.Printf("Time taken with workers: %v", time.Since(t01))
+				log.Printf("Time taken with workers: %+v", time.Since(t01))
 				return nil
 			}
 			// Create an InsertOne model for each chunk
@@ -225,7 +224,7 @@ func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename strin
 			time.Sleep(time.Duration(i*100) * time.Millisecond) // Exponential backoff
 		}
 		if err != nil {
-			errorChan <- fmt.Errorf("failed to generate embedding after %d retries: %v", maxRetries, err)
+			errorChan <- fmt.Errorf("failed to generate embedding after %d retries: %+v", maxRetries, err)
 			continue
 		}
 

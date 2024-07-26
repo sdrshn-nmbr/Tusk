@@ -116,14 +116,14 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 
 	embedding, err := h.Embedder.GenerateEmbedding(query)
 	if err != nil {
-		log.Printf("Failed to generate embedding: %v", err)
+		log.Printf("Failed to generate embedding: %+v", err)
 		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to generate embedding"})
 		return
 	}
 
 	chunks, err := h.Storage.VectorSearch(embedding, 500, 5)
 	if err != nil {
-		log.Printf("Failed to perform vector search: %v", err)
+		log.Printf("Failed to perform vector search: %+v", err)
 		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to perform search"})
 		return
 	}
@@ -134,24 +134,27 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 		fmt.Fprintf(chunkStr, "\n%s\n\n", chunk.Content)
 	}
 
-	queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
+	// queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
 
 	cfg, err := config.NewConfig()
 	if err != nil {
-		log.Printf("Failed to load config: %v", err)
+		log.Printf("Failed to load config: %+v", err)
 		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Internal server error"})
 		return
 	}
 
-	model, err := ai.NewModel(cfg)
+	sysPrompt :=
+		`You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+
+	model, err := ai.NewModel(cfg, sysPrompt)
 	if err != nil {
-		log.Printf("Failed to create model: %v", err)
+		log.Printf("Failed to create model: %+v", err)
 		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to initialize AI model"})
 		return
 	}
 	defer model.Close()
 
-	responseChan, errorChan := model.GenerateResponse(ctx, queryandchunks)
+	responseChan, errorChan := model.GenerateResponse(ctx, query, nil, chunkStr.String())
 
 	modelResponse := new(bytes.Buffer)
 	timeout := time.After(30 * time.Second)
@@ -185,7 +188,7 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 				}
 				return
 			}
-			log.Printf("Error generating response: %v", err)
+			log.Printf("Error generating response: %+v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate response"})
 			return
 
