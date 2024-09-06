@@ -39,6 +39,11 @@ func NewHandler(storage *storage.MongoStorage, embedder *ai.Embedder, tmpl *temp
 }
 
 func (h *Handler) Index(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
 	h.renderFileList(c, "layout.html")
 }
 
@@ -276,21 +281,34 @@ func (h *Handler) Login(c *gin.Context) {
 	log.Println("Login template rendered successfully")
 }
 
-func (h *Handler) Logout(c *gin.Context) {
-	gothic.Logout(c.Writer, c.Request)
-	c.Redirect(302, "/")
-}
-
 func (h *Handler) BeginAuth(c *gin.Context) {
 	provider := c.Param("provider")
+	log.Printf("BeginAuth called with provider: %s", provider)
+	
 	if provider == "" {
+		log.Println("Provider is empty")
 		c.String(http.StatusBadRequest, "You must select a provider")
 		return
 	}
+	
 	q := c.Request.URL.Query()
 	q.Add("provider", provider)
 	c.Request.URL.RawQuery = q.Encode()
+	
+	log.Printf("Starting auth process for provider: %s", provider)
 	gothic.BeginAuthHandler(c.Writer, c.Request)
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	session, _ := gothic.Store.Get(c.Request, "user-session")
+	session.Values["user_id"] = nil
+	session.Options.MaxAge = -1
+	err := session.Save(c.Request, c.Writer)
+	if err != nil {
+		log.Printf("Error saving session: %v", err)
+	}
+	gothic.Logout(c.Writer, c.Request)
+	c.Redirect(http.StatusFound, "/login")
 }
 
 func (h *Handler) CompleteAuth(c *gin.Context) {
