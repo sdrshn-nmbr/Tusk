@@ -15,6 +15,7 @@ import (
 	"github.com/sdrshn-nmbr/tusk/internal/ai"
 	"github.com/sdrshn-nmbr/tusk/internal/config"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
+	"github.com/markbates/goth/gothic"
 )
 
 type Handler struct {
@@ -42,6 +43,7 @@ func (h *Handler) Index(c *gin.Context) {
 }
 
 func (h *Handler) UploadFile(c *gin.Context) {
+	userID := c.GetString("user_id")
 	file, err := c.FormFile("file")
 	if err != nil {
 		log.Printf("Error getting file from form: %+v", err)
@@ -70,7 +72,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	// Create a new io.Reader from the buffer
 	reader := bytes.NewReader(buf.Bytes())
 
-	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder)
+	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder, userID)
 	if err != nil {
 		if err.Error() == "file is not a PDF" {
 			h.handleError(c, http.StatusBadRequest, err)
@@ -85,8 +87,9 @@ func (h *Handler) UploadFile(c *gin.Context) {
 }
 
 func (h *Handler) DeleteFile(c *gin.Context) {
+	userID := c.GetString("user_id")
 	filename := c.PostForm("filename")
-	err := h.Storage.DeleteFileFunc(filename)
+	err := h.Storage.DeleteFileFunc(filename, userID)
 	if err != nil {
 		h.handleError(c, http.StatusInternalServerError, err)
 		return
@@ -96,12 +99,14 @@ func (h *Handler) DeleteFile(c *gin.Context) {
 }
 
 func (h *Handler) GetFileList(c *gin.Context) {
+	// userID := c.GetString("user_id")
 	h.renderFileList(c, "file_list")
 }
 
 func (h *Handler) DownloadFile(c *gin.Context) {
+	userID := c.GetString("user_id")
 	filename := c.Query("filename")
-	content, err := h.Storage.GetFile(filename)
+	content, err := h.Storage.GetFile(filename, userID)
 	if err != nil {
 		h.handleError(c, http.StatusInternalServerError, err)
 		return
@@ -112,6 +117,7 @@ func (h *Handler) DownloadFile(c *gin.Context) {
 }
 
 func (h *Handler) GenerateSearch(c *gin.Context) {
+	userID := c.GetString("user_id")
 	query := c.Query("q")
 	ctx := c.Request.Context()
 
@@ -122,7 +128,7 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 		return
 	}
 
-	chunks, err := h.Storage.VectorSearch(embedding, 500, 5)
+	chunks, err := h.Storage.VectorSearch(embedding, 500, 5, userID)
 	if err != nil {
 		log.Printf("Failed to perform vector search: %+v", err)
 		h.handleError(c, http.StatusInternalServerError, err)
@@ -218,7 +224,8 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 }
 
 func (h *Handler) renderFileList(c *gin.Context, templateName string) {
-	files, err := h.Storage.ListFiles()
+	userID := c.GetString("user_id")
+	files, err := h.Storage.ListFiles(userID)
 	if err != nil {
 		h.handleError(c, http.StatusInternalServerError, err)
 		return
@@ -257,4 +264,46 @@ func formatFileSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+func (h *Handler) Login(c *gin.Context) {
+	log.Println("Entering Login handler")
+	log.Printf("Template: %v", h.tmpl.DefinedTemplates())
+	c.HTML(http.StatusOK, "login", gin.H{
+		"title": "Login - Tusk",
+		"debug": "This is a debug message",
+	})
+	log.Println("Login template rendered successfully")
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	gothic.Logout(c.Writer, c.Request)
+	c.Redirect(302, "/")
+}
+
+func (h *Handler) BeginAuth(c *gin.Context) {
+	provider := c.Param("provider")
+	if provider == "" {
+		c.String(http.StatusBadRequest, "You must select a provider")
+		return
+	}
+	q := c.Request.URL.Query()
+	q.Add("provider", provider)
+	c.Request.URL.RawQuery = q.Encode()
+	gothic.BeginAuthHandler(c.Writer, c.Request)
+}
+
+func (h *Handler) CompleteAuth(c *gin.Context) {
+	user, err := gothic.CompleteUserAuth(c.Writer, c.Request)
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"ErrorMessage": fmt.Sprintf("Error during authentication: %v", err),
+			"StatusCode":   http.StatusInternalServerError,
+		})
+		return
+	}
+	session, _ := gothic.Store.Get(c.Request, "user-session")
+	session.Values["user_id"] = user.UserID
+	session.Save(c.Request, c.Writer)
+	c.Redirect(http.StatusFound, "/")
 }

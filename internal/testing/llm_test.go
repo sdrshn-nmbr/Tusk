@@ -74,7 +74,7 @@ func TestGeneratewithVectorSearch(t *testing.T) {
 		t.Fatalf("Failed to generate embedding: %+v", err)
 	}
 
-	chunks, err := ms.VectorSearch(queryEmbedding, 50, 2)
+	chunks, err := ms.VectorSearch(queryEmbedding, 50, 2, "user_id")
 	if err != nil {
 		t.Logf("Error: %+v", err)
 	}
