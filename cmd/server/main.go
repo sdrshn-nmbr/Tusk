@@ -71,19 +71,27 @@ func main() {
 		github.New(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:8080/auth/github/callback"),
 	)
 
-	// Routes
-	r.GET("/", func(c *gin.Context) {
-		session, _ := gothic.Store.Get(c.Request, "user-session")
-		if session.Values["user_id"] == nil {
-			c.Redirect(http.StatusFound, "/login")
-			return
-		}
+	// Update the root route
+	r.GET("/", middleware.AuthRequired(), func(c *gin.Context) {
 		h.Index(c)
 	})
-	r.GET("/login", h.Login)
-	r.GET("/logout", h.Logout)
+
+	// Update the login route
+	r.GET("/login", func(c *gin.Context) {
+		session, _ := gothic.Store.Get(c.Request, "user-session")
+		if session.Values["user_id"] != nil {
+			c.Redirect(http.StatusFound, "/")
+			return
+		}
+		h.Login(c)
+	})
+
+	// Auth routes
 	r.GET("/auth/:provider", h.BeginAuth)
 	r.GET("/auth/:provider/callback", h.CompleteAuth)
+	r.GET("/logout", h.Logout) // Add this line
+
+	// Use middleware for protected routes
 	r.POST("/upload", middleware.AuthRequired(), h.UploadFile)
 	r.POST("/delete", middleware.AuthRequired(), h.DeleteFile)
 	r.GET("/files", middleware.AuthRequired(), h.GetFileList)

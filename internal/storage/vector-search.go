@@ -17,7 +17,6 @@ func (ms *MongoStorage) VectorSearch(queryVector []float32, numCandidates, limit
 	coll := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"user_id": userID}}},
 		{{Key: "$vectorSearch", Value: bson.D{
 			{Key: "index", Value: "chunks_embedding_index"},
 			{Key: "path", Value: "embedding"},
@@ -25,6 +24,7 @@ func (ms *MongoStorage) VectorSearch(queryVector []float32, numCandidates, limit
 			{Key: "numCandidates", Value: numCandidates},
 			{Key: "limit", Value: limit},
 		}}},
+		{{Key: "$match", Value: bson.M{"user_id": userID}}},
 		{{Key: "$lookup", Value: bson.D{
 			{Key: "from", Value: ms.documentsCollection},
 			{Key: "localField", Value: "document_id"},
