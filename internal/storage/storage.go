@@ -35,6 +35,7 @@ type Document struct {
 	Filename string             `bson:"filename"`
 	Content  primitive.Binary   `bson:"content"`
 	Metadata map[string]string  `bson:"metadata,omitempty"`
+	UserID   string             `bson:"user_id"`
 }
 
 type Chunk struct {
@@ -43,6 +44,7 @@ type Chunk struct {
 	Content    string             `bson:"content"`
 	Embedding  []float32          `bson:"embedding"`
 	parent     string             `bson:"parent"`
+	UserID     string             `bson:"user_id"`
 }
 
 const (
@@ -65,7 +67,7 @@ func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 	}, nil
 }
 
-func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder) error {
+func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder, userID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // A bit longer than 10s here to allow for bigger docs to be processed
 	defer cancel()
 
@@ -108,6 +110,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 			"uploadDate": time.Now().Format(time.RFC3339),
 			"size":       fmt.Sprintf("%d", len(data)),
 		},
+		UserID: userID,
 	}
 
 	docsColl := ms.client.Database(ms.database).Collection(ms.documentsCollection)
@@ -136,7 +139,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	// Start worker goroutines
 	for i := 0; i < optimalWorkers; i++ {
 		wg.Add(1)
-		go worker(embedder, documentID, filename, chunkChan, resultsChan, errorChan, &wg)
+		go worker(embedder, documentID, filename, userID, chunkChan, resultsChan, errorChan, &wg)
 	}
 
 	// Send chunks to workers
@@ -207,7 +210,7 @@ func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chu
 	}
 }
 
-func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename string, chunkChan <-chan string, resultsChan chan<- Chunk, errorChan chan<- error, wg *sync.WaitGroup) {
+func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename string, userID string, chunkChan <-chan string, resultsChan chan<- Chunk, errorChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for chunkText := range chunkChan {
 		var embedding []float32
@@ -229,19 +232,20 @@ func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename strin
 			Content:    chunkText,
 			Embedding:  embedding,
 			parent:     filename,
+			UserID:     userID,
 		}
 
 		resultsChan <- chunk
 	}
 }
 
-func (ms *MongoStorage) GetFile(filename string) ([]byte, error) {
+func (ms *MongoStorage) GetFile(filename string, userID string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var result Document
 	collection := ms.client.Database(ms.database).Collection(ms.documentsCollection)
-	err := collection.FindOne(ctx, bson.M{"filename": filename}).Decode(&result)
+	err := collection.FindOne(ctx, bson.M{"filename": filename, "user_id": userID}).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.New("file not found")
@@ -252,14 +256,14 @@ func (ms *MongoStorage) GetFile(filename string) ([]byte, error) {
 	return result.Content.Data, nil
 }
 
-func (ms *MongoStorage) DeleteFileFunc(filename string) error {
+func (ms *MongoStorage) DeleteFileFunc(filename string, userID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	docsColl := ms.client.Database(ms.database).Collection(ms.documentsCollection)
 
 	var doc Document
-	err := docsColl.FindOne(ctx, bson.M{"filename": filename}).Decode(&doc)
+	err := docsColl.FindOne(ctx, bson.M{"filename": filename, "user_id": userID}).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return errors.New("file not found")
@@ -267,7 +271,7 @@ func (ms *MongoStorage) DeleteFileFunc(filename string) error {
 		return err
 	}
 
-	_, err = docsColl.DeleteOne(ctx, bson.M{"filename": filename})
+	_, err = docsColl.DeleteOne(ctx, bson.M{"filename": filename, "user_id": userID})
 	if err != nil {
 		return err
 	}
@@ -281,12 +285,12 @@ func (ms *MongoStorage) DeleteFileFunc(filename string) error {
 	return nil
 }
 
-func (ms *MongoStorage) ListFiles() ([]string, error) {
+func (ms *MongoStorage) ListFiles(userID string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	collection := ms.client.Database(ms.database).Collection(ms.documentsCollection)
-	cursor, err := collection.Find(ctx, bson.M{})
+	cursor, err := collection.Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return nil, err
 	}

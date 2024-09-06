@@ -10,13 +10,14 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func (ms *MongoStorage) VectorSearch(queryVector []float32, numCandidates, limit int) ([]Chunk, error) {
+func (ms *MongoStorage) VectorSearch(queryVector []float32, numCandidates, limit int, userID string) ([]Chunk, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	coll := ms.client.Database(ms.database).Collection(ms.chunksCollection)
 
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"user_id": userID}}},
 		{{Key: "$vectorSearch", Value: bson.D{
 			{Key: "index", Value: "chunks_embedding_index"},
 			{Key: "path", Value: "embedding"},

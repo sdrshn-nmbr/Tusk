@@ -1,4 +1,4 @@
-# MongoDB Atlas Integration Plan
+<!-- # MongoDB Atlas Integration Plan
 
 ## 1. Project Structure Updates
 
@@ -230,4 +230,4 @@ func main() {
 6. Update your frontend to include the AI assistant interface.
 7. Modify your Dockerfile and deployment scripts to include the new environment variables for MongoDB and OpenAI.
 
-Remember to handle errors appropriately and implement proper authentication and authorization for your application.
+Remember to handle errors appropriately and implement proper authentication and authorization for your application. -->
