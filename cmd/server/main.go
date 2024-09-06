@@ -38,7 +38,7 @@ func main() {
 
 	// Set up Gin router
 	r := gin.Default()
-	r.MaxMultipartMemory = 8 << 20 // 8 MiB
+	r.MaxMultipartMemory = 32 << 20 // 8 MiB
 
 	// Load HTML templates
 	r.SetHTMLTemplate(tmpl)
@@ -54,7 +54,7 @@ func main() {
 	// Serve static files
 	r.Static("/static", "./web/static")
 
-	// Start server
+	//
 	log.Println("Server starting on :8080")
 	log.Fatal(r.Run(":8080"))
 }

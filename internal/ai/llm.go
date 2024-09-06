@@ -164,3 +164,60 @@ func (m *Model) GenerateResponseOllama(ctx context.Context, query string) (<-cha
 
 	return responseChan, errChan
 }
+
+func (m *Model) GenerateResponsePplx(ctx context.Context, query string) (<-chan string, <-chan error) {
+    responseChan := make(chan string)
+    errorChan := make(chan error, 1)
+
+    go func() {
+        defer close(responseChan)
+        defer close(errorChan)
+
+        url := "https://api.perplexity.ai/chat/completions"
+        payload := strings.NewReader(fmt.Sprintf(`{
+            "model": "llama-3.1-sonar-small-128k-online",
+            "messages": [
+                {"role": "system", "content": "Be precise and concise."},
+                {"role": "user", "content": %q}
+            ]
+        }`, query))
+
+        req, err := http.NewRequestWithContext(ctx, "POST", url, payload)
+        if err != nil {
+            errorChan <- fmt.Errorf("error creating request: %w", err)
+            return
+        }
+
+        req.Header.Add("accept", "application/json")
+        req.Header.Add("content-type", "application/json")
+        req.Header.Add("authorization", "Bearer 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")
+
+        res, err := http.DefaultClient.Do(req)
+        if err != nil {
+            errorChan <- fmt.Errorf("error sending request: %w", err)
+            return
+        }
+        defer res.Body.Close()
+
+        if res.StatusCode != http.StatusOK {
+            errorChan <- fmt.Errorf("unexpected status code: %d", res.StatusCode)
+            return
+        }
+
+        scanner := bufio.NewScanner(res.Body)
+        for scanner.Scan() {
+            select {
+            case <-ctx.Done():
+                errorChan <- ctx.Err()
+                return
+            case responseChan <- scanner.Text():
+            }
+        }
+
+        if err := scanner.Err(); err != nil {
+            errorChan <- fmt.Errorf("error reading response: %w", err)
+        }
+    }()
+
+    return responseChan, errorChan
+}

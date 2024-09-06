@@ -45,16 +45,17 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
 		log.Printf("Error getting file from form: %+v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get file from form"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	openedFile, err := file.Open()
 	if err != nil {
 		log.Printf("Error opening file: %+v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
+
 	defer openedFile.Close()
 
 	// Create a bytes.Buffer to read the file content
@@ -62,7 +63,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	_, err = io.Copy(&buf, openedFile)
 	if err != nil {
 		log.Printf("Error reading file content: %+v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file content"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -72,10 +73,10 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder)
 	if err != nil {
 		if err.Error() == "file is not a PDF" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded file is not a PDF"})
+			h.handleError(c, http.StatusBadRequest, err)
 		} else {
 			log.Printf("Error saving file: %+v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+			h.handleError(c, http.StatusInternalServerError, err)
 		}
 		return
 	}
@@ -117,14 +118,14 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	embedding, err := h.Embedder.GenerateEmbedding(query)
 	if err != nil {
 		log.Printf("Failed to generate embedding: %+v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to generate embedding"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	chunks, err := h.Storage.VectorSearch(embedding, 500, 5)
 	if err != nil {
 		log.Printf("Failed to perform vector search: %+v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to perform search"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -139,7 +140,7 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	cfg, err := config.NewConfig()
 	if err != nil {
 		log.Printf("Failed to load config: %+v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Internal server error"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -149,12 +150,13 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	model, err := ai.NewModel(cfg, sysPrompt)
 	if err != nil {
 		log.Printf("Failed to create model: %+v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Failed to initialize AI model"})
+		h.handleError(c, http.StatusInternalServerError, err)
 		return
 	}
 	defer model.Close()
 
 	responseChan, errorChan := model.GenerateResponse(ctx, query, nil, chunkStr.String())
+	// responseChan, errorChan := model.GenerateResponsePplx(ctx, query)
 
 	modelResponse := new(bytes.Buffer)
 	timeout := time.After(30 * time.Second)
@@ -236,7 +238,12 @@ func (h *Handler) renderFileList(c *gin.Context, templateName string) {
 }
 
 func (h *Handler) handleError(c *gin.Context, statusCode int, err error) {
-	c.String(statusCode, err.Error())
+	log.Printf("Error occurred: %+v", err)
+
+	c.HTML(statusCode, "error.html", gin.H{
+		"ErrorMessage": err.Error(),
+		"StatusCode":   statusCode,
+	})
 }
 
 func formatFileSize(size int64) string {

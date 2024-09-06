@@ -1,4 +1,4 @@
-// new storage.go with concurrency
+// storage.go
 package storage
 
 import (
@@ -75,11 +75,6 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 		return err
 	}
 
-	// if !isValidFileType(data) {
-	// 	log.Printf("File is not a valid format: %s", filename)
-	// 	return fmt.Errorf("file is not a valid format")
-	// }
-
 	var text string
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
@@ -89,7 +84,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 		text, err = extractTextFromDOCX(bytes.NewReader(data))
 	case ".txt":
 		text, err = string(data), nil
-	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
+	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif":
 		text, err = extractTextFromImage(data)
 		log.Print("\n\n\nEXTRACTING TEXT FROM IMG\n\n\n")
 	default:
@@ -100,6 +95,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	if err != nil {
 		log.Printf("Error extracting text from file: %+v", err)
 		text = "Text extraction failed"
+		return err
 	}
 
 	doc := Document{
@@ -237,25 +233,6 @@ func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename strin
 
 		resultsChan <- chunk
 	}
-}
-
-func isValidFileType(data []byte) bool {
-	if len(data) < 4 {
-		return false
-	}
-
-	// Check for PDF magic number
-	if string(data[:4]) == "%PDF" {
-		return true
-	}
-
-	// Check for DOCX (Office Open XML) signature
-	// DOCX files are ZIP archives, so they start with PK\x03\x04
-	if len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04 {
-		return true
-	}
-
-	return false
 }
 
 func (ms *MongoStorage) GetFile(filename string) ([]byte, error) {
