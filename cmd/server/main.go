@@ -98,6 +98,9 @@ func main() {
 	r.GET("/download", middleware.AuthRequired(), h.DownloadFile)
 	r.GET("/generate-search", middleware.AuthRequired(), h.GenerateSearch)
 
+	// Add this line with the other protected routes
+	r.POST("/create-directory", middleware.AuthRequired(), h.CreateDirectory)
+
 	// Serve static files
 	r.Static("/static", "./web/static")
 

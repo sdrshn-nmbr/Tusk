@@ -36,6 +36,7 @@ type Document struct {
 	Content  primitive.Binary   `bson:"content"`
 	Metadata map[string]string  `bson:"metadata,omitempty"`
 	UserID   string             `bson:"user_id"`
+	Directory string            `bson:"directory"`
 }
 
 type Chunk struct {
@@ -45,6 +46,7 @@ type Chunk struct {
 	Embedding  []float32          `bson:"embedding"`
 	parent     string             `bson:"parent"`
 	UserID     string             `bson:"user_id"`
+	Directory  string             `bson:"directory"`
 }
 
 const (
@@ -67,7 +69,7 @@ func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 	}, nil
 }
 
-func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder, userID string) error {
+func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder, userID string, directory string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // A bit longer than 10s here to allow for bigger docs to be processed
 	defer cancel()
 
@@ -110,7 +112,8 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 			"uploadDate": time.Now().Format(time.RFC3339),
 			"size":       fmt.Sprintf("%d", len(data)),
 		},
-		UserID: userID,
+		UserID:   userID,
+		Directory: directory,
 	}
 
 	docsColl := ms.client.Database(ms.database).Collection(ms.documentsCollection)
@@ -139,7 +142,7 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 	// Start worker goroutines
 	for i := 0; i < optimalWorkers; i++ {
 		wg.Add(1)
-		go worker(embedder, documentID, filename, userID, chunkChan, resultsChan, errorChan, &wg)
+		go worker(embedder, documentID, filename, userID, directory, chunkChan, resultsChan, errorChan, &wg)
 	}
 
 	// Send chunks to workers
@@ -210,7 +213,7 @@ func (ms *MongoStorage) insertChunks(ctx context.Context, resultsChan <-chan Chu
 	}
 }
 
-func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename string, userID string, chunkChan <-chan string, resultsChan chan<- Chunk, errorChan chan<- error, wg *sync.WaitGroup) {
+func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename string, userID string, directory string, chunkChan <-chan string, resultsChan chan<- Chunk, errorChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for chunkText := range chunkChan {
 		var embedding []float32
@@ -233,6 +236,7 @@ func worker(embedder *ai.Embedder, documentID primitive.ObjectID, filename strin
 			Embedding:  embedding,
 			parent:     filename,
 			UserID:     userID,
+			Directory:  directory,
 		}
 
 		resultsChan <- chunk
@@ -285,12 +289,13 @@ func (ms *MongoStorage) DeleteFileFunc(filename string, userID string) error {
 	return nil
 }
 
-func (ms *MongoStorage) ListFiles(userID string) ([]string, error) {
+func (ms *MongoStorage) ListFiles(userID, directory string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	collection := ms.client.Database(ms.database).Collection(ms.documentsCollection)
-	cursor, err := collection.Find(ctx, bson.M{"user_id": userID})
+	filter := bson.M{"user_id": userID, "directory": directory, "filename": bson.M{"$ne": ".directory"}}
+	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -335,4 +340,104 @@ func (ms *MongoStorage) GetFileSize(filename string) (int64, error) {
 	}
 
 	return size, nil
+}
+
+func (ms *MongoStorage) CreateDirectory(userID, directoryPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create a placeholder document to represent the directory
+	doc := Document{
+		Filename:  ".directory",
+		UserID:    userID,
+		Directory: directoryPath,
+	}
+
+	_, err := ms.client.Database(ms.database).Collection(ms.documentsCollection).InsertOne(ctx, doc)
+	return err
+}
+
+func (ms *MongoStorage) VectorSearch(queryVector []float32, numCandidates, limit int, userID, directory string) ([]Chunk, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	chunksColl := ms.client.Database(ms.database).Collection(ms.chunksCollection)
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$vectorSearch", Value: bson.D{
+			{Key: "index", Value: "chunks_embedding_index"},
+			{Key: "path", Value: "embedding"},
+			{Key: "queryVector", Value: queryVector},
+			{Key: "numCandidates", Value: numCandidates},
+			{Key: "limit", Value: limit},
+		}}},
+		{{Key: "$match", Value: bson.M{"user_id": userID, "directory": directory}}},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: ms.documentsCollection},
+			{Key: "localField", Value: "document_id"},
+			{Key: "foreignField", Value: "_id"},
+			{Key: "as", Value: "document"},
+		}}},
+		{{Key: "$unwind", Value: "$document"}},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 1},
+			{Key: "document_id", Value: 1},
+			{Key: "content", Value: 1},
+			{Key: "embedding", Value: 1},
+			{Key: "parent", Value: 1},
+			{Key: "user_id", Value: 1},
+			{Key: "directory", Value: 1},
+			{Key: "document", Value: bson.D{
+				{Key: "filename", Value: "$document.filename"},
+				{Key: "metadata", Value: "$document.metadata"},
+			}},
+		}}},
+	}
+
+	cursor, err := chunksColl.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+
+	defer cursor.Close(ctx)
+
+	var results []Chunk
+	for cursor.Next(ctx) {
+		var chunk Chunk
+		if err := cursor.Decode(&chunk); err != nil {
+			return nil, err
+		}
+		results = append(results, chunk)
+	}
+
+	return results, nil
+}
+
+func (ms *MongoStorage) ListSubdirectories(userID, directory string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	collection := ms.client.Database(ms.database).Collection(ms.documentsCollection)
+	filter := bson.M{
+		"user_id":   userID,
+		"directory": bson.M{"$regex": "^" + directory + "/[^/]+$"},
+		"filename":  ".directory",
+	}
+
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var subdirectories []string
+	for cursor.Next(ctx) {
+		var doc Document
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		subdirectories = append(subdirectories, doc.Directory)
+	}
+
+	return subdirectories, nil
 }

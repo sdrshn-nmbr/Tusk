@@ -43,7 +43,7 @@ func TestVectorSearch(t *testing.T) {
 		t.Error("Generated embedding is empty")
 	}
 
-	results, err := mongodb.VectorSearch(queryEmbedding, 20, 1, "user_id")
+	results, err := mongodb.VectorSearch(queryEmbedding, 20, 1, "user_id", "collection_id")
 	if err != nil {
 		t.Fatalf("VectorSearch failed: %+v", err)
 	}

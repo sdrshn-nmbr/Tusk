@@ -26,8 +26,14 @@ type Handler struct {
 }
 
 type FileInfo struct {
+	Name      string
+	Size      string
+	Directory string
+}
+
+type DirectoryInfo struct {
 	Name string
-	Size string
+	Path string
 }
 
 func NewHandler(storage *storage.MongoStorage, embedder *ai.Embedder, tmpl *template.Template) *Handler {
@@ -44,11 +50,13 @@ func (h *Handler) Index(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
-	h.renderFileList(c, "layout.html")
+	currentDirectory := c.DefaultQuery("directory", "/")
+	h.renderFileList(c, "layout.html", currentDirectory)
 }
 
 func (h *Handler) UploadFile(c *gin.Context) {
 	userID := c.GetString("user_id")
+	directory := c.PostForm("directory")
 	file, err := c.FormFile("file")
 	if err != nil {
 		log.Printf("Error getting file from form: %+v", err)
@@ -77,7 +85,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	// Create a new io.Reader from the buffer
 	reader := bytes.NewReader(buf.Bytes())
 
-	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder, userID)
+	err = h.Storage.SaveFile(file.Filename, reader, h.Embedder, userID, directory)
 	if err != nil {
 		if err.Error() == "file is not a PDF" {
 			h.handleError(c, http.StatusBadRequest, err)
@@ -88,7 +96,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		return
 	}
 
-	h.renderFileList(c, "file_list")
+	h.renderFileList(c, "file_list", directory)
 }
 
 func (h *Handler) DeleteFile(c *gin.Context) {
@@ -105,7 +113,7 @@ func (h *Handler) DeleteFile(c *gin.Context) {
 
 func (h *Handler) GetFileList(c *gin.Context) {
 	// userID := c.GetString("user_id")
-	h.renderFileList(c, "file_list")
+	h.renderFileList(c, "file_list", "/")
 }
 
 func (h *Handler) DownloadFile(c *gin.Context) {
@@ -123,6 +131,7 @@ func (h *Handler) DownloadFile(c *gin.Context) {
 
 func (h *Handler) GenerateSearch(c *gin.Context) {
 	userID := c.GetString("user_id")
+	directory := c.Query("directory")
 	query := c.Query("q")
 	ctx := c.Request.Context()
 
@@ -133,7 +142,7 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 		return
 	}
 
-	chunks, err := h.Storage.VectorSearch(embedding, 500, 5, userID)
+	chunks, err := h.Storage.VectorSearch(embedding, 500, 5, userID, directory)
 	if err != nil {
 		log.Printf("Failed to perform vector search: %+v", err)
 		h.handleError(c, http.StatusInternalServerError, err)
@@ -228,9 +237,9 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 	}
 }
 
-func (h *Handler) renderFileList(c *gin.Context, templateName string) {
+func (h *Handler) renderFileList(c *gin.Context, templateName, currentDirectory string) {
 	userID := c.GetString("user_id")
-	files, err := h.Storage.ListFiles(userID)
+	files, err := h.Storage.ListFiles(userID, currentDirectory)
 	if err != nil {
 		h.handleError(c, http.StatusInternalServerError, err)
 		return
@@ -243,10 +252,27 @@ func (h *Handler) renderFileList(c *gin.Context, templateName string) {
 			h.handleError(c, http.StatusInternalServerError, err)
 			return
 		}
-		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size)})
+		fileInfos = append(fileInfos, FileInfo{Name: file, Size: formatFileSize(size), Directory: currentDirectory})
 	}
 
-	c.HTML(http.StatusOK, templateName, gin.H{"Files": fileInfos})
+	// Get subdirectories
+	subdirectories, err := h.Storage.ListSubdirectories(userID, currentDirectory)
+	if err != nil {
+		h.handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	var directoryInfos []DirectoryInfo
+	for _, dir := range subdirectories {
+		directoryInfos = append(directoryInfos, DirectoryInfo{Name: filepath.Base(dir), Path: dir})
+	}
+
+	c.HTML(http.StatusOK, templateName, gin.H{
+		"Files":             fileInfos,
+		"Directories":       directoryInfos,
+		"CurrentDirectory":  currentDirectory,
+		"ParentDirectory":   filepath.Dir(currentDirectory),
+	})
 }
 
 func (h *Handler) handleError(c *gin.Context, statusCode int, err error) {
@@ -324,4 +350,22 @@ func (h *Handler) CompleteAuth(c *gin.Context) {
 	session.Values["user_id"] = user.UserID
 	session.Save(c.Request, c.Writer)
 	c.Redirect(http.StatusFound, "/")
+}
+
+func (h *Handler) CreateDirectory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	directoryPath := c.PostForm("directory")
+
+	if directoryPath == "" {
+		h.handleError(c, http.StatusBadRequest, fmt.Errorf("directory path is required"))
+		return
+	}
+
+	err := h.Storage.CreateDirectory(userID, directoryPath)
+	if err != nil {
+		h.handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Directory created successfully"})
 }

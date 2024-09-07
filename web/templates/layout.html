@@ -158,8 +158,8 @@
             <button onclick="openModal()" class="btn btn-primary">
               <i class="fas fa-upload mr-2"></i>Upload
             </button>
-            <button class="btn btn-secondary">
-              <i class="fas fa-share mr-2"></i>Share
+            <button onclick="openDirectoryModal()" class="btn btn-secondary">
+              <i class="fas fa-folder-plus mr-2"></i>Create Directory
             </button>
             <a href="/logout" class="btn btn-logout">Logout</a>
           </div>
@@ -234,6 +234,27 @@
       </div>
     </div>
 
+    <!-- Directory modal -->
+    <div id="directory-modal" class="fixed inset-0 bg-notion-900 bg-opacity-50 z-50 flex items-center justify-center hidden modal">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full">
+            <h3 class="text-2xl font-semibold mb-4 text-notion-800">Create Directory</h3>
+            <form id="directory-form" hx-post="/create-directory" hx-trigger="submit" hx-target="#file-list" hx-swap="innerHTML">
+                <div class="mb-4">
+                    <label class="block text-notion-700 text-sm font-medium mb-2" for="directory">
+                        Directory Name
+                    </label>
+                    <input type="text" name="directory" id="directory" class="w-full text-notion-700 input" required>
+                </div>
+                <div class="flex justify-end">
+                    <button type="button" onclick="closeDirectoryModal()" class="btn btn-secondary mr-2">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
       function openModal() {
         document.getElementById("upload-modal").classList.remove("hidden");
@@ -302,6 +323,20 @@
               </div>
             `;
           }
+        }
+      });
+
+      function openDirectoryModal() {
+        document.getElementById("directory-modal").classList.remove("hidden");
+      }
+
+      function closeDirectoryModal() {
+        document.getElementById("directory-modal").classList.add("hidden");
+      }
+
+      document.getElementById("directory-form").addEventListener("htmx:afterRequest", function (event) {
+        if (event.detail.successful) {
+          closeDirectoryModal();
         }
       });
     </script>
