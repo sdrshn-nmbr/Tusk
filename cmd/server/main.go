@@ -31,6 +31,11 @@ func main() {
 		log.Fatalf("Failed to initialize MongoDB storage: %v", err)
 	}
 
+	// Run migration
+	if err := ms.MigrateMissingFileSizes(); err != nil {
+		log.Printf("Error migrating file sizes: %v", err)
+	}
+
 	// Initialize embedder
 	embedder := ai.NewEmbedder(cfg)
 

@@ -324,14 +324,21 @@ func (ms *MongoStorage) GetFileSize(filename string) (int64, error) {
 		return 0, err
 	}
 
+	// Check if metadata exists
+	if result.Metadata == nil {
+		return 0, errors.New("file metadata not found")
+	}
+
 	sizeStr, ok := result.Metadata["size"]
 	if !ok {
-		return 0, errors.New("file size metadata not found")
+		// If size is not in metadata, return the length of the content
+		return int64(len(result.Content.Data)), nil
 	}
 
 	size, err := strconv.ParseInt(sizeStr, 10, 64)
 	if err != nil {
-		return 0, errors.New("invalid file size format in metadata")
+		// If we can't parse the size, return the length of the content
+		return int64(len(result.Content.Data)), nil
 	}
 
 	return size, nil
