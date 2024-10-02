@@ -7,6 +7,8 @@ RUN go mod download
 
 COPY . .
 
+COPY web/templates ./web/templates
+
 RUN go build -o main ./cmd/server
 
 CMD ["./main"]

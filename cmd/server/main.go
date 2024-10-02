@@ -15,6 +15,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 )
 
@@ -40,7 +41,12 @@ func main() {
 	embedder := ai.NewEmbedder(cfg)
 
 	// Parse templates
-	tmpl, err := template.ParseGlob(filepath.Join("web", "templates", "*.html"))
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %v", err)
+	}
+	tmpl, err := template.ParseGlob(filepath.Join(wd, "web", "templates", "*.html"))
+
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
