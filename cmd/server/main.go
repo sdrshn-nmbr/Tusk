@@ -1,7 +1,7 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -15,6 +15,8 @@ import (
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
 	"html/template"
 	"log"
+	"net/http"
+	"os"
 	"path/filepath"
 )
 
@@ -40,7 +42,7 @@ func main() {
 	embedder := ai.NewEmbedder(cfg)
 
 	// Parse templates
-	tmpl, err := template.ParseGlob(filepath.Join("web", "templates", "*.html"))
+	tmpl, err := parseTemplates()
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
@@ -62,8 +64,8 @@ func main() {
 
 	// Set up Goth for authentication
 	key := "your-secret-key" // Replace with a secure secret key
-	maxAge := 86400 * 30 // 30 days
-	isProd := false // Set to true in production
+	maxAge := 86400 * 30     // 30 days
+	isProd := false          // Set to true in production
 	store := sessions.NewCookieStore([]byte(key))
 	store.MaxAge(maxAge)
 	store.Options.Path = "/"
@@ -108,4 +110,35 @@ func main() {
 
 	log.Println("Server starting on :8080")
 	log.Fatal(r.Run(":8080"))
+}
+
+func parseTemplates() (*template.Template, error) {
+	templatesDir := "web/templates"
+
+	// Check if we're running in a Docker container
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		templatesDir = "/app/web/templates"
+	}
+
+	// Use filepath.Walk to find all .html files in the templates directory
+	var templateFiles []string
+	err := filepath.Walk(templatesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".html" {
+			templateFiles = append(templateFiles, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(templateFiles) == 0 {
+		return nil, fmt.Errorf("no template files found in %s", templatesDir)
+	}
+
+	return template.ParseFiles(templateFiles...)
 }

@@ -31,6 +31,10 @@ go.work.sum
 *.swn
 *~
 
+.gitignore
+
+landing/
+
 # env
 .env
 *.env
