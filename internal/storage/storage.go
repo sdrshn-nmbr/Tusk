@@ -54,7 +54,7 @@ const (
 )
 
 func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.MongoDBURI))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(cfg.MongoURI))
 	if err != nil {
 		return nil, err
 	}

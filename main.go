@@ -1,6 +1,8 @@
 package main
 
 import (
+	"embed"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -13,11 +15,15 @@ import (
 	"github.com/sdrshn-nmbr/tusk/internal/middleware"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 )
+
+//go:embed web/templates/*
+var templateFS embed.FS
 
 func main() {
 	// load all secrets from config
@@ -40,19 +46,10 @@ func main() {
 	// Initialize embedder
 	embedder := ai.NewEmbedder(cfg)
 
-	// Parse templates
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("Failed to get working directory: %v", err)
-	}
-	tmpl, err := template.ParseGlob(filepath.Join(wd, "web", "templates", "*.html"))
-
+	// Parse templates using embedded file system
+	tmpl, err := parseTemplates()
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
-	}
-	log.Printf("Templates parsed successfully. Number of templates: %d", len(tmpl.Templates()))
-	for _, t := range tmpl.Templates() {
-		log.Printf("Template name: %s", t.Name())
 	}
 
 	// Initialize handler with MongoDB storage and embedder
@@ -77,9 +74,11 @@ func main() {
 	store.Options.Secure = isProd
 	gothic.Store = store
 
+	// Update callback URLs for production
+	callbackURL := "https://" + os.Getenv("FLY_APP_NAME") + ".fly.dev/auth/%s/callback"
 	goth.UseProviders(
-		google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, "http://localhost:8080/auth/google/callback"),
-		github.New(cfg.GithubClientID, cfg.GithubClientSecret, "http://localhost:8080/auth/github/callback"),
+		google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf(callbackURL, "google")),
+		github.New(cfg.GithubClientID, cfg.GithubClientSecret, fmt.Sprintf(callbackURL, "github")),
 	)
 
 	// Update the root route
@@ -112,6 +111,35 @@ func main() {
 	// Serve static files
 	r.Static("/static", "./web/static")
 
-	log.Println("Server starting on :8080")
-	log.Fatal(r.Run(":8080"))
+	// Use PORT environment variable provided by Fly.io
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server starting on :%s", port)
+	// log.Fatal(r.Run(":" + port))
+	log.Fatal(r.Run("0.0.0.0:" + port))
+}
+
+func parseTemplates() (*template.Template, error) {
+    tmpl := template.New("")
+    err := fs.WalkDir(templateFS, "web/templates", func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        if d.IsDir() {
+            return nil
+        }
+        if filepath.Ext(path) != ".html" {
+            return nil
+        }
+        b, err := templateFS.ReadFile(path)
+        if err != nil {
+            return err
+        }
+        name := filepath.ToSlash(path[len("web/templates/"):])
+        _, err = tmpl.New(name).Parse(string(b))
+        return err
+    })
+    return tmpl, err
 }

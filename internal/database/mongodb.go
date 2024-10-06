@@ -15,7 +15,7 @@ type MongoDB struct {
 }
 
 func NewMongoDB(cfg *config.Config) (*MongoDB, error) {
-	clientOptions := options.Client().ApplyURI(cfg.MongoDBURI)
+	clientOptions := options.Client().ApplyURI(cfg.MongoURI)
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 
 	if err != nil {

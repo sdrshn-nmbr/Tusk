@@ -1,14 +1,25 @@
-FROM golang:1.22-alpine
+FROM golang:1.22 as builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
-
 COPY . .
 
-COPY web/templates ./web/templates
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o server ./
 
-RUN go build -o main ./cmd/server
+FROM alpine:latest
 
-CMD ["./main"]
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY --from=builder /app/server .
+
+# You don't need to copy templates anymore, they're embedded
+# COPY --from=builder /app/web/templates ./web/templates
+
+COPY --from=builder /app/web/static ./web/static
+COPY --from=builder /app/web/templates ./web/templates
+
+EXPOSE 8080
+
+CMD ["./server"]
