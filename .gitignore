@@ -48,4 +48,5 @@ Thumbs.db
 
 # Fly.io
 fly.toml
-.dockerignore
+.dockerignoreenv.txt
+google_client_secret.json
