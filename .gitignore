@@ -46,11 +46,6 @@ landing/
 .DS_Store
 Thumbs.db
 
-# Build directories
-cmd/server/tusk
-
-./google_client_secret.json
-
 # Fly.io
 fly.toml
 .dockerignore

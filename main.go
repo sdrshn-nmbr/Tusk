@@ -64,9 +64,11 @@ func main() {
 	log.Println("HTML templates loaded into Gin")
 
 	// Set up Goth for authentication
-	key := "your-secret-key" // Replace with a secure secret key
-	maxAge := 86400 * 30     // 30 days
-	isProd := false          // Set to true in production
+
+	// key := "your-secret-key"
+	key := os.Getenv("SESSION_SECRET")
+	maxAge := 86400 * 30 // 30 days
+	isProd := false      // Set to true in production
 	store := sessions.NewCookieStore([]byte(key))
 	store.MaxAge(maxAge)
 	store.Options.Path = "/"
@@ -122,24 +124,24 @@ func main() {
 }
 
 func parseTemplates() (*template.Template, error) {
-    tmpl := template.New("")
-    err := fs.WalkDir(templateFS, "web/templates", func(path string, d fs.DirEntry, err error) error {
-        if err != nil {
-            return err
-        }
-        if d.IsDir() {
-            return nil
-        }
-        if filepath.Ext(path) != ".html" {
-            return nil
-        }
-        b, err := templateFS.ReadFile(path)
-        if err != nil {
-            return err
-        }
-        name := filepath.ToSlash(path[len("web/templates/"):])
-        _, err = tmpl.New(name).Parse(string(b))
-        return err
-    })
-    return tmpl, err
+	tmpl := template.New("")
+	err := fs.WalkDir(templateFS, "web/templates", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".html" {
+			return nil
+		}
+		b, err := templateFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		name := filepath.ToSlash(path[len("web/templates/"):])
+		_, err = tmpl.New(name).Parse(string(b))
+		return err
+	})
+	return tmpl, err
 }
