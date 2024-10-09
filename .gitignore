@@ -33,11 +33,12 @@ go.work.sum
 
 .gitignore
 
-landing/
+trytusk/
 
 # env
 .env
 *.env
+*env*
 
 # Logs
 *.log

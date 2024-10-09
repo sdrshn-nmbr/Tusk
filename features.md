@@ -1,6 +1,8 @@
-# 1. Better rendering for LLM response
+# Features
 
-# 2. Workspaces/Directories
+## 1. Better rendering for LLM response
 
-# 3. Workspaces/Directories
+## 2. Workspaces/Directories
+
+## 3. Conversation history
 

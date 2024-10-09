@@ -3,6 +3,13 @@ package main
 import (
 	"embed"
 	"fmt"
+	"html/template"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -14,19 +21,13 @@ import (
 	"github.com/sdrshn-nmbr/tusk/internal/handlers"
 	"github.com/sdrshn-nmbr/tusk/internal/middleware"
 	"github.com/sdrshn-nmbr/tusk/internal/storage"
-	"html/template"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
 )
 
 //go:embed web/templates/*
 var templateFS embed.FS
 
 func main() {
-	// load all secrets from config
+	// Load configuration
 	cfg, err := config.NewConfig()
 	if err != nil {
 		log.Fatalf("Config not initialized properly: %v", err)
@@ -63,12 +64,25 @@ func main() {
 	r.SetHTMLTemplate(tmpl)
 	log.Println("HTML templates loaded into Gin")
 
-	// Set up Goth for authentication
+	// Determine the environment
+	isProd := os.Getenv("APP_ENV") == "production"
 
-	// key := "your-secret-key"
+	var callbackURL string
+	if isProd {
+		// in prod
+		appURL := "https://" + os.Getenv("FLY_APP_NAME") + ".fly.dev"
+		callbackURL = appURL + "/auth/%s/callback"
+	} else {
+		// in dev
+		callbackURL = "http://localhost:8080/auth/%s/callback"
+	}
+
+	// Set up session store
 	key := os.Getenv("SESSION_SECRET")
+	if key == "" {
+		log.Fatal("SESSION_SECRET environment variable is not set")
+	}
 	maxAge := 86400 * 30 // 30 days
-	isProd := false      // Set to true in production
 	store := sessions.NewCookieStore([]byte(key))
 	store.MaxAge(maxAge)
 	store.Options.Path = "/"
@@ -76,12 +90,11 @@ func main() {
 	store.Options.Secure = isProd
 	gothic.Store = store
 
-	// Update callback URLs for production
-	callbackURL := "https://" + os.Getenv("FLY_APP_NAME") + ".fly.dev/auth/%s/callback"
-	goth.UseProviders(
-		google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf(callbackURL, "google")),
-		github.New(cfg.GithubClientID, cfg.GithubClientSecret, fmt.Sprintf(callbackURL, "github")),
-	)
+	// Set up Goth providers based on the environment
+	var providers []goth.Provider
+	providers = append(providers, google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf(callbackURL, "google")))
+	providers = append(providers, github.New(cfg.GithubClientID, cfg.GithubClientSecret, fmt.Sprintf(callbackURL, "github")))
+	goth.UseProviders(providers...)
 
 	// Update the root route
 	r.GET("/", middleware.AuthRequired(), func(c *gin.Context) {
@@ -101,7 +114,7 @@ func main() {
 	// Auth routes
 	r.GET("/auth/:provider", h.BeginAuth)
 	r.GET("/auth/:provider/callback", h.CompleteAuth)
-	r.GET("/logout", h.Logout) // Add this line
+	r.GET("/logout", h.Logout)
 
 	// Use middleware for protected routes
 	r.POST("/upload", middleware.AuthRequired(), h.UploadFile)
@@ -119,10 +132,10 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Server starting on :%s", port)
-	// log.Fatal(r.Run(":" + port))
 	log.Fatal(r.Run("0.0.0.0:" + port))
 }
 
+// parseTemplates parses HTML templates from the embedded file system.
 func parseTemplates() (*template.Template, error) {
 	tmpl := template.New("")
 	err := fs.WalkDir(templateFS, "web/templates", func(path string, d fs.DirEntry, err error) error {

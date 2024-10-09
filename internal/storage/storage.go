@@ -9,7 +9,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
-	"runtime"
+	// "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,9 +66,8 @@ func NewMongoStorage(cfg *config.Config) (*MongoStorage, error) {
 		chunksCollection:    "chunks",
 	}, nil
 }
-
 func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *ai.Embedder, userID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // A bit longer than 10s here to allow for bigger docs to be processed
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	data, err := io.ReadAll(content)
@@ -88,7 +87,6 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 		text, err = string(data), nil
 	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif":
 		text, err = extractTextFromImage(data)
-		log.Print("\n\n\nEXTRACTING TEXT FROM IMG\n\n\n")
 	default:
 		log.Printf("unsupported file type: %s", ext)
 		err = fmt.Errorf("unsupported file type: %s", ext)
@@ -96,7 +94,6 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	if err != nil {
 		log.Printf("Error extracting text from file: %+v", err)
-		text = "Text extraction failed"
 		return err
 	}
 
@@ -124,40 +121,66 @@ func (ms *MongoStorage) SaveFile(filename string, content io.Reader, embedder *a
 
 	chunks := ChunkText(text)
 
-	chunkChan := make(chan string, len(chunks))
 	resultsChan := make(chan Chunk, len(chunks))
-	errorChan := make(chan error, numWorkers)
+	errorChan := make(chan error, len(chunks))
 	var wg sync.WaitGroup
 
-	// Determine optimal number of workers
-	optimalWorkers := runtime.NumCPU() * 2
+	batchSize := 16           // Adjust based on API limits
+	maxConcurrentBatches := 4 // Adjust based on system capabilities and API rate limits
+	semaphore := make(chan struct{}, maxConcurrentBatches)
 
-	if optimalWorkers > numWorkers {
-		optimalWorkers = numWorkers
-	}
-
-	// Start worker goroutines
-	for i := 0; i < optimalWorkers; i++ {
-		wg.Add(1)
-		go worker(embedder, documentID, filename, userID, chunkChan, resultsChan, errorChan, &wg)
-	}
-
-	// Send chunks to workers
-	go func() {
-		for _, chunk := range chunks {
-			chunkChan <- chunk
+	for i := 0; i < len(chunks); i += batchSize {
+		end := i + batchSize
+		if end > len(chunks) {
+			end = len(chunks)
 		}
-		close(chunkChan)
-	}()
+		batchChunks := chunks[i:end]
 
-	// Wait for all workers to finish
+		wg.Add(1)
+		semaphore <- struct{}{}
+		go func(batchChunks []string) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			var embeddings [][]float32
+			var err error
+			for retry := 0; retry < maxRetries; retry++ {
+				embeddings, err = embedder.GenerateEmbeddings(batchChunks)
+				if err == nil {
+					break
+				}
+				time.Sleep(time.Duration(retry*100) * time.Millisecond)
+			}
+			if err != nil {
+				errorChan <- fmt.Errorf("Error generating embeddings: %+v", err)
+				return
+			}
+			if len(embeddings) != len(batchChunks) {
+				errorChan <- fmt.Errorf("Mismatch in embeddings count: expected %d, got %d", len(batchChunks), len(embeddings))
+				return
+			}
+
+			for i, embedding := range embeddings {
+				chunk := Chunk{
+					DocumentID: documentID,
+					Content:    batchChunks[i],
+					Embedding:  embedding,
+					parent:     filename,
+					UserID:     userID,
+				}
+				resultsChan <- chunk
+			}
+		}(batchChunks)
+	}
+
+	// Wait for all batches to complete
 	go func() {
 		wg.Wait()
 		close(resultsChan)
 		close(errorChan)
 	}()
 
-	// Collect results and insert into db
+	// Collect results and insert into MongoDB
 	return ms.insertChunks(ctx, resultsChan, errorChan)
 }
 

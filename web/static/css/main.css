@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-white text-gray-800;
+    @apply bg-gray-100 text-gray-800;
   }
 }
 
@@ -22,11 +22,11 @@
   }
 
   .btn-primary {
-    @apply bg-green-800 text-white hover:bg-green-900;
+    @apply bg-green-600 text-white hover:bg-green-700;
   }
 
   .btn-secondary {
-    @apply bg-green-200 text-green-800 hover:bg-green-300;
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
   }
 
   .input {
@@ -43,6 +43,16 @@
 
   .table-row {
     @apply hover:bg-green-100 transition-colors duration-200;
+  }
+
+  .error-container,
+  .login-container {
+    @apply transition-all duration-300 ease-in-out hover:shadow-2xl;
+  }
+
+  .error-icon svg,
+  .login-icon svg {
+    @apply animate-pulse;
   }
 }
 
@@ -78,33 +88,23 @@
   @apply bg-gray-200 px-1 rounded;
 }
 
-@layer components {
-  .error-container {
-    @apply transition-all duration-300 ease-in-out hover:shadow-2xl;
-  }
-
-  .error-icon svg {
-    @apply animate-pulse;
-  }
-
-  .btn-primary {
-    @apply bg-green-600 text-white hover:bg-green-700;
-  }
-
-  .btn-secondary {
-    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
-  }
-}
-
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.error-container {
+.error-container,
+.login-container {
   animation: fadeIn 0.5s ease-out;
 }
 
-.error-icon svg {
-  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.5));
+.error-icon svg,
+.login-icon svg {
+  filter: drop-shadow(0 0 8px rgba(30, 111, 63, 0.5));
 }
