@@ -68,7 +68,7 @@
   </head>
   <body
     class="bg-notion-50 text-notion-900 font-sans"
-    x-data="{ sidebarOpen: false }"
+    x-data="{ sidebarOpen: false, chatOpen: false }"
   >
     <div class="flex h-screen overflow-hidden">
       <!-- Sidebar -->
@@ -189,6 +189,45 @@
           </div>
         </main>
       </div>
+
+      <!-- Floating Chat Component -->
+      <div
+        x-show="chatOpen"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 transform scale-90"
+        x-transition:enter-end="opacity-100 transform scale-100"
+        x-transition:leave="transition ease-in duration-300"
+        x-transition:leave-start="opacity-100 transform scale-100"
+        x-transition:leave-end="opacity-0 transform scale-90"
+        class="fixed bottom-4 right-4 w-96 max-w-full h-3/4 bg-white rounded-lg shadow-xl flex flex-col overflow-hidden"
+        @click.away="chatOpen = false"
+      >
+        <div class="bg-notion-100 p-4 flex justify-between items-center">
+          <h3 class="text-lg font-semibold">Chat History</h3>
+          <button @click="chatOpen = false" class="text-notion-600 hover:text-notion-800">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div id="chat-history" class="flex-grow overflow-y-auto p-4 space-y-4">
+          <!-- Chat messages will be dynamically inserted here -->
+        </div>
+        <div class="bg-notion-100 p-4">
+          <form id="chat-form" class="flex items-center">
+            <input
+              type="text"
+              id="chat-input"
+              class="flex-grow p-2 rounded-l-md border-t border-b border-l focus:outline-none focus:ring-2 focus:ring-notion-500"
+              placeholder="Type your message..."
+            />
+            <button
+              type="submit"
+              class="bg-notion-600 text-white px-4 py-2 rounded-r-md hover:bg-notion-700 focus:outline-none focus:ring-2 focus:ring-notion-500"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
 
     <!-- Upload modal -->
@@ -303,6 +342,62 @@
             `;
           }
         }
+      });
+
+      // Chat functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const searchForm = document.getElementById('search-form');
+        const chatHistory = document.getElementById('chat-history');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+
+        let chatOpen = false;
+
+        function toggleChat() {
+          chatOpen = !chatOpen;
+          document.body.dispatchEvent(new CustomEvent('chat-toggle', { detail: { open: chatOpen } }));
+        }
+
+        function addMessage(sender, content) {
+          const messageDiv = document.createElement('div');
+          messageDiv.className = `p-3 rounded-lg ${sender === 'user' ? 'bg-notion-100 ml-auto' : 'bg-notion-200'}`;
+          messageDiv.innerHTML = `
+            <p class="font-semibold">${sender === 'user' ? 'You' : 'AI'}</p>
+            <p>${content}</p>
+          `;
+          chatHistory.appendChild(messageDiv);
+          chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        searchForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          const query = e.target.elements.q.value;
+          if (query.trim()) {
+            toggleChat();
+            addMessage('user', query);
+            fetch('/generate-search?q=' + encodeURIComponent(query))
+              .then(response => response.json())
+              .then(data => {
+                addMessage('ai', data.results);
+              })
+              .catch(error => console.error('Error:', error));
+          }
+        });
+
+        chatForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          const message = chatInput.value;
+          if (message.trim()) {
+            addMessage('user', message);
+            chatInput.value = '';
+            fetch('/generate-search?q=' + encodeURIComponent(message))
+              .then(response => response.json())
+              .then(data => {
+                addMessage('ai', data.results);
+              })
+              .catch(error => console.error('Error:', error));
+          }
+        });
       });
     </script>
   </body>

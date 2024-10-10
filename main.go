@@ -53,8 +53,18 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
+	// After creating the embedder
+	sysPrompt := `You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+	model, err := ai.NewModel(cfg, sysPrompt)
+	if err != nil {
+		log.Fatalf("Failed to create model: %v", err)
+	}
+	defer model.Close()
+
+	// Update the NewHandler call
+
 	// Initialize handler with MongoDB storage and embedder
-	h := handlers.NewHandler(ms, embedder, tmpl)
+	h := handlers.NewHandler(ms, embedder, model, tmpl)
 
 	// Set up Gin router
 	r := gin.Default()

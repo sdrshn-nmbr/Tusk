@@ -12,11 +12,18 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sdrshn-nmbr/tusk/internal/ai"
-	"github.com/sdrshn-nmbr/tusk/internal/config"
-	"github.com/sdrshn-nmbr/tusk/internal/storage"
 	"github.com/markbates/goth/gothic"
+	"github.com/sdrshn-nmbr/tusk/internal/ai"
+	// "github.com/sdrshn-nmbr/tusk/internal/config"
+	"github.com/sdrshn-nmbr/tusk/internal/storage"
 )
+
+// type Handler struct {
+// 	Storage  *storage.MongoStorage
+// 	Embedder *ai.Embedder
+// 	Model    *ai.Model
+// 	tmpl     *template.Template
+// }
 
 type Handler struct {
 	Storage  *storage.MongoStorage
@@ -30,10 +37,11 @@ type FileInfo struct {
 	Size string
 }
 
-func NewHandler(storage *storage.MongoStorage, embedder *ai.Embedder, tmpl *template.Template) *Handler {
+func NewHandler(storage *storage.MongoStorage, embedder *ai.Embedder, model *ai.Model, tmpl *template.Template) *Handler {
 	return &Handler{
 		Storage:  storage,
 		Embedder: embedder,
+		Model:    model,
 		tmpl:     tmpl,
 	}
 }
@@ -148,25 +156,28 @@ func (h *Handler) GenerateSearch(c *gin.Context) {
 
 	// queryandchunks := fmt.Sprintf("%s\n Query: %s", chunkStr.String(), query)
 
-	cfg, err := config.NewConfig()
-	if err != nil {
-		log.Printf("Failed to load config: %+v", err)
-		h.handleError(c, http.StatusInternalServerError, err)
-		return
-	}
+	// cfg, err := config.NewConfig()
+	// if err != nil {
+	// 	log.Printf("Failed to load config: %+v", err)
+	// 	h.handleError(c, http.StatusInternalServerError, err)
+	// 	return
+	// }
 
-	sysPrompt :=
-		`You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
+	// sysPrompt :=
+	// 	`You are an AI assistant that helps users with their queries. Do NOT mention the documents anywhere in your response - make it sound as natural as possible.`
 
-	model, err := ai.NewModel(cfg, sysPrompt)
-	if err != nil {
-		log.Printf("Failed to create model: %+v", err)
-		h.handleError(c, http.StatusInternalServerError, err)
-		return
-	}
-	defer model.Close()
+	// model, err := ai.NewModel(cfg, sysPrompt)
+	// if err != nil {
+	// 	log.Printf("Failed to create model: %+v", err)
+	// 	h.handleError(c, http.StatusInternalServerError, err)
+	// 	return
+	// }
+	// defer model.Close()
 
-	responseChan, errorChan := model.GenerateResponse(ctx, query, nil, chunkStr.String())
+	// Use the existing Model instance
+	responseChan, errorChan := h.Model.GenerateResponse(ctx, query, nil, chunkStr.String())
+
+	// responseChan, errorChan := model.GenerateResponse(ctx, query, nil, chunkStr.String())
 	// responseChan, errorChan := model.GenerateResponsePplx(ctx, query)
 
 	modelResponse := new(bytes.Buffer)
@@ -284,17 +295,17 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) BeginAuth(c *gin.Context) {
 	provider := c.Param("provider")
 	log.Printf("BeginAuth called with provider: %s", provider)
-	
+
 	if provider == "" {
 		log.Println("Provider is empty")
 		c.String(http.StatusBadRequest, "You must select a provider")
 		return
 	}
-	
+
 	q := c.Request.URL.Query()
 	q.Add("provider", provider)
 	c.Request.URL.RawQuery = q.Encode()
-	
+
 	log.Printf("Starting auth process for provider: %s", provider)
 	gothic.BeginAuthHandler(c.Writer, c.Request)
 }
@@ -324,4 +335,67 @@ func (h *Handler) CompleteAuth(c *gin.Context) {
 	session.Values["user_id"] = user.UserID
 	session.Save(c.Request, c.Writer)
 	c.Redirect(http.StatusFound, "/")
+}
+
+func (h *Handler) SetupRoutes(r *gin.Engine) {
+	// ... existing routes ...
+
+	// New chat-related routes
+	r.POST("/api/chat", h.HandleChat)
+	r.GET("/api/chat-history", h.GetChatHistory)
+}
+
+func (h *Handler) HandleChat(c *gin.Context) {
+	var request struct {
+		Message string `json:"message"`
+	}
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	responseChan, errChan := h.Model.GenerateResponse(ctx, request.Message, nil)
+
+	var response string
+	for {
+		select {
+		case chunk, ok := <-responseChan:
+			if !ok {
+				// Channel closed, we're done
+				c.JSON(http.StatusOK, gin.H{"response": response})
+				return
+			}
+			response += chunk
+		case err, ok := <-errChan:
+			if !ok {
+				// Error channel closed
+				return
+			}
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error generating response"})
+				return
+			}
+		case <-ctx.Done():
+			c.JSON(http.StatusRequestTimeout, gin.H{"error": "Request timed out"})
+			return
+		}
+	}
+}
+
+func (h *Handler) GetChatHistory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	history := h.Model.GetHistory()
+	c.JSON(http.StatusOK, gin.H{"history": history})
 }
